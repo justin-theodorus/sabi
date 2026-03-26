@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env
+.env.local
+.mcp.json
+.claude/
+CLAUDE.md 
+PRD.md 
+IMPLEMENTATION_PLAN.md
