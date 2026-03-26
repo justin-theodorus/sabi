@@ -78,6 +78,7 @@ interface AACBoardProps {
 
 export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('core_words')
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
 
   const filtered = ICONS.filter((i) => i.category === activeCategory)
   const meta = CATEGORY_META[activeCategory]
@@ -126,14 +127,15 @@ export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
                   fill
                   className="object-contain"
                   onError={(e) => {
-                    // Show letter placeholder if icon missing
-                    const img = e.target as HTMLImageElement
-                    img.style.display = 'none'
+                    (e.target as HTMLImageElement).style.display = 'none'
+                    setFailedImages(prev => new Set(prev).add(icon.id))
                   }}
                 />
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs font-bold pointer-events-none">
-                  {icon.label.slice(0, 2).toUpperCase()}
-                </div>
+                {failedImages.has(icon.id) && (
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs font-bold pointer-events-none">
+                    {icon.label.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
               </div>
               <span className={`text-xs font-medium text-center leading-tight ${isSelected ? 'text-gray-900' : 'text-gray-300'}`}>
                 {icon.label}
