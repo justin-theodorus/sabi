@@ -160,6 +160,19 @@ class JudgeRequest(BaseModel):
 class JudgeResponse(BaseModel):
     off_context: bool
 
+class ScoreSessionRequest(BaseModel):
+    transcript: List[Message]
+    emotion_summary: Optional[str] = ""
+    scenario_id: Optional[str] = "hawker_centre"
+
+class CompetenceScores(BaseModel):
+    operational: float   # 0-100: ability to operate the AAC device/symbols
+    linguistic: float    # 0-100: vocabulary range, grammar, message complexity
+    social: float        # 0-100: appropriateness, turn-taking, social norms
+    strategic: float     # 0-100: repair strategies, rephrasing when misunderstood
+    confidence: float    # 0-100: fluency, initiation, response speed indicators
+    summary: str         # 1-2 sentence overall assessment
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def build_system_prompt(scenario_id: str, mode: str, persona: str) -> str:
@@ -253,3 +266,71 @@ Answer with ONLY "yes" or "no"."""
     )
     answer = response.content[0].text.strip().lower()
     return JudgeResponse(off_context=(answer == "yes"))
+
+
+@app.post("/score-session", response_model=CompetenceScores)
+async def score_session(req: ScoreSessionRequest):
+    """
+    Score a completed session across 5 AAC communication competence dimensions.
+    Called once on first therapist view; result is cached in sessions.competence_scores.
+    """
+    scenario_desc = SCENARIO_DESCRIPTIONS.get(
+        req.scenario_id or "hawker_centre",
+        "a social communication scenario"
+    )
+
+    transcript_text = "\n".join(
+        f"{'Learner' if m.role == 'user' else 'NPC'}: {m.content}"
+        for m in req.transcript
+    )
+
+    prompt = f"""You are an AAC (Augmentative and Alternative Communication) specialist scoring a learner's communication session.
+
+Scenario: {scenario_desc}
+Emotion summary: {req.emotion_summary or 'Not available'}
+
+Session transcript:
+{transcript_text}
+
+Score the learner across 5 AAC communication competence dimensions (0-100 each):
+- operational: Ability to use AAC symbols/device effectively (icon selection accuracy, message construction)
+- linguistic: Vocabulary range, message length, grammatical structure in icon combinations
+- social: Appropriateness of responses, turn-taking, adherence to social norms for this scenario
+- strategic: Use of repair strategies, rephrasing, compensating for communication breakdowns
+- confidence: Fluency of communication, initiative-taking, consistency across the session
+
+Return ONLY valid JSON with this exact structure:
+{{
+  "operational": <number 0-100>,
+  "linguistic": <number 0-100>,
+  "social": <number 0-100>,
+  "strategic": <number 0-100>,
+  "confidence": <number 0-100>,
+  "summary": "<1-2 sentence overall assessment>"
+}}"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    import json
+    raw = response.content[0].text.strip()
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    try:
+        scores = json.loads(raw)
+        return CompetenceScores(
+            operational=float(scores.get("operational", 50)),
+            linguistic=float(scores.get("linguistic", 50)),
+            social=float(scores.get("social", 50)),
+            strategic=float(scores.get("strategic", 50)),
+            confidence=float(scores.get("confidence", 50)),
+            summary=scores.get("summary", "Session scored successfully."),
+        )
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse scoring response: {e}")
