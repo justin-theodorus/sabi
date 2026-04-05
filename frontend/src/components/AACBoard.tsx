@@ -1,15 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import { type ScenarioIcon } from '@/lib/scenarios'
 
 export interface AACIcon {
   id: string
   label: string
-  category: 'core_words' | 'social' | 'emotions'
+  category: 'core_words' | 'social' | 'emotions' | 'scenario'
 }
 
-const ICONS: AACIcon[] = [
+const BASE_ICONS: AACIcon[] = [
   // Core Words
   { id: 'want', label: 'want', category: 'core_words' },
   { id: 'go', label: 'go', category: 'core_words' },
@@ -63,32 +63,61 @@ const ICONS: AACIcon[] = [
   { id: 'frustrated', label: 'frustrated', category: 'emotions' },
 ]
 
-type Category = 'core_words' | 'social' | 'emotions'
+type Category = 'core_words' | 'social' | 'emotions' | 'scenario'
 
 const CATEGORY_META: Record<Category, { label: string; color: string; bg: string; border: string }> = {
   core_words: { label: 'Core Words', color: 'text-gray-900', bg: 'bg-white', border: 'border-gray-300' },
-  social: { label: 'Social', color: 'text-white', bg: 'bg-green-600', border: 'border-green-500' },
-  emotions: { label: 'Emotions', color: 'text-white', bg: 'bg-pink-600', border: 'border-pink-500' },
+  social:     { label: 'Social',     color: 'text-white',   bg: 'bg-green-600', border: 'border-green-500' },
+  emotions:   { label: 'Emotions',   color: 'text-white',   bg: 'bg-pink-600',  border: 'border-pink-500' },
+  scenario:   { label: 'Scenario',   color: 'text-white',   bg: 'bg-orange-500', border: 'border-orange-400' },
 }
 
 interface AACBoardProps {
   onIconSelect: (icon: AACIcon) => void
   selectedIds: string[]
+  scenarioIcons?: ScenarioIcon[]
+  scenarioLabel?: string
 }
 
-export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
-  const [activeCategory, setActiveCategory] = useState<Category>('core_words')
+export default function AACBoard({ onIconSelect, selectedIds, scenarioIcons, scenarioLabel }: AACBoardProps) {
+  const [activeCategory, setActiveCategory] = useState<Category>(
+    scenarioIcons && scenarioIcons.length > 0 ? 'scenario' : 'core_words'
+  )
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
 
-  const filtered = ICONS.filter((i) => i.category === activeCategory)
-  const meta = CATEGORY_META[activeCategory]
+  const scenarioAACIcons: AACIcon[] = (scenarioIcons ?? []).map((si) => ({
+    id: si.id,
+    label: si.label,
+    category: 'scenario',
+  }))
+
+  const allIcons: AACIcon[] = [...BASE_ICONS, ...scenarioAACIcons]
+
+  const categories: Category[] = scenarioIcons && scenarioIcons.length > 0
+    ? ['scenario', 'core_words', 'social', 'emotions']
+    : ['core_words', 'social', 'emotions']
+
+  const meta = {
+    ...CATEGORY_META,
+    scenario: {
+      ...CATEGORY_META.scenario,
+      label: scenarioLabel ?? 'Scenario',
+    },
+  }
+
+  const filtered = allIcons.filter((i) => i.category === activeCategory)
+
+  function getImageSrc(icon: AACIcon) {
+    if (icon.category === 'scenario') return `/icons/scenario/${icon.id}.png`
+    return `/icons/${icon.category}/${icon.id}.png`
+  }
 
   return (
     <div className="flex flex-col h-full">
       {/* Category Tabs */}
       <div className="flex gap-2 mb-3 flex-shrink-0">
-        {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
-          const m = CATEGORY_META[cat]
+        {categories.map((cat) => {
+          const m = meta[cat]
           const active = activeCategory === cat
           return (
             <button
@@ -120,20 +149,19 @@ export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
                   : 'border-gray-600 bg-gray-800 hover:bg-gray-700'
                 }`}
             >
-              <div className="w-12 h-12 relative mb-1">
-                <Image
-                  src={`/icons/${icon.category}/${icon.id}.png`}
-                  alt={icon.label}
-                  fill
-                  className="object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none'
-                    setFailedImages(prev => new Set(prev).add(icon.id))
-                  }}
-                />
+              <div className="w-12 h-12 relative mb-1 flex items-center justify-center">
+                {!failedImages.has(icon.id) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={getImageSrc(icon)}
+                    alt={icon.label}
+                    className="w-full h-full object-contain"
+                    onError={() => setFailedImages(prev => new Set(prev).add(icon.id))}
+                  />
+                )}
                 {failedImages.has(icon.id) && (
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs font-bold pointer-events-none">
-                    {icon.label.slice(0, 2).toUpperCase()}
+                  <div className="flex items-center justify-center text-gray-400 text-xs font-bold w-full h-full">
+                    {icon.label.slice(0, 3).toUpperCase()}
                   </div>
                 )}
               </div>

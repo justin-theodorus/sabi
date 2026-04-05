@@ -7,9 +7,16 @@ import SpeechBubble from './SpeechBubble'
 interface ScenarioStageProps {
   npcResponse: string | null
   npcLoading: boolean
+  backgroundSrc?: string
+  npcSrc?: string
 }
 
-export default function ScenarioStage({ npcResponse, npcLoading }: ScenarioStageProps) {
+export default function ScenarioStage({
+  npcResponse,
+  npcLoading,
+  backgroundSrc = '/backgrounds/hawker-centre.jpg',
+  npcSrc = '/npc/hawker-uncle.png',
+}: ScenarioStageProps) {
   const [bgError, setBgError] = useState(false)
   const [npcError, setNpcError] = useState(false)
 
@@ -22,8 +29,8 @@ export default function ScenarioStage({ npcResponse, npcLoading }: ScenarioStage
       {!bgError && (
         <div className="absolute inset-0" style={{ zIndex: 2 }}>
           <Image
-            src="/backgrounds/hawker-centre.jpg"
-            alt="Hawker Centre"
+            src={backgroundSrc}
+            alt="Scenario background"
             fill
             className="object-cover"
             onError={() => setBgError(true)}
@@ -39,8 +46,8 @@ export default function ScenarioStage({ npcResponse, npcLoading }: ScenarioStage
       >
         {!npcError && (
           <Image
-            src="/npc/hawker-uncle.png"
-            alt="Hawker Uncle"
+            src={npcSrc}
+            alt="NPC character"
             fill
             className="object-contain object-top"
             onError={() => setNpcError(true)}
