@@ -19,17 +19,17 @@ export default function MessageBar({
   loading,
 }: MessageBarProps) {
   return (
-    <div className="flex items-center gap-3 bg-gray-800 rounded-xl px-4 py-3 border border-gray-700">
+    <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border-2 border-gray-200 shadow-sm">
       {/* Selected icons as chips */}
       <div className="flex-1 flex flex-wrap gap-2 min-h-[3rem] items-center">
         {selectedIcons.length === 0 ? (
-          <span className="text-gray-500 text-sm italic">Select icons above to build your message…</span>
+          <span className="text-gray-400 text-sm italic">Select icons above to build your message…</span>
         ) : (
           selectedIcons.map((icon, i) => (
             <button
               key={`${icon.id}-${i}`}
               onClick={() => onRemove(i)}
-              className="flex items-center gap-1 bg-gray-700 hover:bg-red-800 border border-gray-600 rounded-lg px-2 py-1 transition-colors group"
+              className="flex items-center gap-1 bg-blue-50 hover:bg-red-50 border border-blue-200 hover:border-red-300 rounded-lg px-2 py-1 transition-colors group"
               title="Click to remove"
             >
               <div className="w-6 h-6 relative flex-shrink-0">
@@ -40,7 +40,7 @@ export default function MessageBar({
                   className="object-contain"
                 />
               </div>
-              <span className="text-xs text-gray-300 group-hover:text-white">{icon.label}</span>
+              <span className="text-xs text-blue-800 group-hover:text-red-700 font-medium">{icon.label}</span>
             </button>
           ))
         )}
@@ -51,7 +51,7 @@ export default function MessageBar({
         {selectedIcons.length > 0 && (
           <button
             onClick={onClear}
-            className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
             title="Clear"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -62,7 +62,7 @@ export default function MessageBar({
         <button
           onClick={onSubmit}
           disabled={selectedIcons.length === 0 || loading}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors shadow-sm"
           title="Send message"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
