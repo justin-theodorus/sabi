@@ -1,5 +1,13 @@
 import type { Metadata } from 'next'
+import { Nunito } from 'next/font/google'
 import './globals.css'
+
+const nunito = Nunito({
+  subsets: ['latin'],
+  weight: ['400', '600', '700', '800'],
+  variable: '--font-nunito',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'SABI — AAC Training',
@@ -20,7 +28,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className="bg-gray-900 text-white min-h-screen">{children}</body>
+      <body className={`${nunito.variable} min-h-screen`}>{children}</body>
     </html>
   )
 }
