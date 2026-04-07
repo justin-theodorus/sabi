@@ -14,6 +14,7 @@ export interface DialogueOptions {
   scenario_id?: string
   mode?: string
   persona?: string
+  mood_modifier?: string
 }
 
 export async function sendDialogue(
@@ -30,6 +31,7 @@ export async function sendDialogue(
       scenario_id: options.scenario_id ?? 'hawker_centre',
       mode: options.mode ?? 'learning',
       persona: options.persona ?? 'guided_learner',
+      mood_modifier: options.mood_modifier ?? null,
     }),
   })
 

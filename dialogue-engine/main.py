@@ -140,6 +140,7 @@ class DialogueRequest(BaseModel):
     scenario_id: Optional[str] = "hawker_centre"
     mode: Optional[str] = "learning"
     persona: Optional[str] = "guided_learner"
+    mood_modifier: Optional[str] = None
 
 class DialogueResponse(BaseModel):
     response: str
@@ -175,7 +176,7 @@ class CompetenceScores(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def build_system_prompt(scenario_id: str, mode: str, persona: str) -> str:
+def build_system_prompt(scenario_id: str, mode: str, persona: str, mood_modifier: Optional[str] = None) -> str:
     scenario = SCENARIO_PROMPTS.get(scenario_id, SCENARIO_PROMPTS["hawker_centre"])
     persona_mod = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["guided_learner"])
     mode_mod = MODE_PROMPTS.get(mode, "")
@@ -183,6 +184,8 @@ def build_system_prompt(scenario_id: str, mode: str, persona: str) -> str:
     parts = [scenario, persona_mod]
     if mode_mod:
         parts.append(mode_mod)
+    if mood_modifier:
+        parts.append(mood_modifier)
     parts.append("Always respond in English. Use simple, clear language.")
     return "\n".join(filter(None, parts))
 
@@ -202,6 +205,7 @@ async def dialogue(req: DialogueRequest):
         req.scenario_id or "hawker_centre",
         req.mode or "learning",
         req.persona or "guided_learner",
+        req.mood_modifier,
     )
 
     messages = []
