@@ -9,6 +9,7 @@ interface ScenarioStageProps {
   npcLoading: boolean
   backgroundSrc?: string
   npcSrc?: string
+  npcEmotion?: string  // NPC's current emotion (happy, sad, mad, confused, surprised, neutral)
 }
 
 export default function ScenarioStage({
@@ -16,9 +17,20 @@ export default function ScenarioStage({
   npcLoading,
   backgroundSrc = '/backgrounds/hawker-centre.jpg',
   npcSrc = '/npc/hawker-uncle.png',
+  npcEmotion,
 }: ScenarioStageProps) {
   const [bgError, setBgError] = useState(false)
   const [npcError, setNpcError] = useState(false)
+
+  // Determine NPC image path based on emotion
+  const getNpcImagePath = () => {
+    if (npcEmotion) {
+      return `/npc/uncle/${npcEmotion}.png`
+    }
+    return npcSrc
+  }
+
+  const npcImageSrc = getNpcImagePath()
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-xl">
@@ -46,10 +58,10 @@ export default function ScenarioStage({
       >
         {!npcError && (
           <Image
-            src={npcSrc}
+            src={npcImageSrc}
             alt="NPC character"
             fill
-            className="object-contain object-top"
+            className="object-contain object-top transition-all duration-300"
             onError={() => setNpcError(true)}
           />
         )}

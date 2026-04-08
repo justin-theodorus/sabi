@@ -14,9 +14,21 @@ interface UseEmotionCaptureOptions {
   enabled: boolean
 }
 
+export interface EmotionLogEntry {
+  emotion_result: EmotionResult  // Full emotion result with all scores
+  timestamp: number
+}
+
+export interface UseEmotionCaptureReturn {
+  currentEmotion: EmotionResult | null
+  getEmotionLog: () => EmotionLogEntry[]
+  resetEmotionLog: () => void
+}
+
 /**
- * Polls the expression service every 500ms, logs emotion events to the session service.
- * Returns the latest detected emotion for live UI display.
+ * Polls the expression service every 1000ms, logs emotion events to the session service.
+ * Accumulates emotions between user responses for emotion analysis.
+ * Returns the latest detected emotion for live UI display + emotion log accessors.
  * All errors are swallowed — emotion failure must never disrupt the learner session.
  */
 export function useEmotionCapture({
@@ -25,12 +37,13 @@ export function useEmotionCapture({
   sessionStartTime,
   captureFrame,
   enabled,
-}: UseEmotionCaptureOptions): EmotionResult | null {
+}: UseEmotionCaptureOptions): UseEmotionCaptureReturn {
   const [currentEmotion, setCurrentEmotion] = useState<EmotionResult | null>(null)
   const enabledRef = useRef(enabled)
   const serviceReadyRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const emotionLogRef = useRef<EmotionLogEntry[]>([])
 
   // Keep ref in sync so the interval closure always sees latest value
   useEffect(() => {
@@ -67,9 +80,24 @@ export function useEmotionCapture({
     const result = await analyzeFrame(blob)
     if (!result) return
     setCurrentEmotion(result)
+
+    // Add full emotion result to emotion log (1 entry per second)
+    emotionLogRef.current.push({
+      emotion_result: result,
+      timestamp: Date.now(),
+    })
+
     const offsetMs = Date.now() - sessionStartTime
     await logEmotion(result, offsetMs)
   }, [captureFrame, sessionStartTime, logEmotion])
+
+  const getEmotionLog = useCallback((): EmotionLogEntry[] => {
+    return emotionLogRef.current
+  }, [])
+
+  const resetEmotionLog = useCallback((): void => {
+    emotionLogRef.current = []
+  }, [])
 
   useEffect(() => {
     if (!enabled) {
@@ -89,8 +117,8 @@ export function useEmotionCapture({
       if (ready) {
         serviceReadyRef.current = true
         if (healthPollRef.current) clearInterval(healthPollRef.current)
-        // Start 500ms emotion capture interval
-        intervalRef.current = setInterval(runCapture, 500)
+        // Start 1000ms (1 second) emotion capture interval
+        intervalRef.current = setInterval(runCapture, 1000)
       }
     }, 2000)
 
@@ -100,5 +128,9 @@ export function useEmotionCapture({
     }
   }, [enabled, runCapture])
 
-  return currentEmotion
+  return {
+    currentEmotion,
+    getEmotionLog,
+    resetEmotionLog,
+  }
 }

@@ -28,9 +28,11 @@ SUPABASE_HEADERS = {
     "Prefer": "return=representation",
 }
 
-PERSONA_GUIDED = "guided_learner"
-PERSONA_SOCIAL = "social_practice_learner"
-PERSONA_INDEPENDENT = "independent_communicator"
+PERSONA_SHY_CHICK = "shy_chick"
+PERSONA_STEADY_TURTLE = "steady_turtle"
+PERSONA_CURIOUS_MONKEY = "curious_monkey"
+PERSONA_ZIPPY_SOTONG = "zippy_sotong"
+PERSONA_GARANG_CRAB = "garang_crab"
 
 
 class SessionMetrics(BaseModel):
@@ -54,13 +56,24 @@ def classify_persona(metrics: SessionMetrics) -> tuple[str, str]:
     re_prompts = metrics.re_prompt_count
     avg_icons = metrics.avg_icons_per_message
 
-    if latency > 20000 or re_prompts > 3 or avg_icons < 2:
-        return PERSONA_GUIDED, "High latency, frequent re-prompts, or simple icon combos"
+    # Shy Chick: hesitant, low confidence (high latency, many re-prompts)
+    if latency > 20000 or re_prompts > 3:
+        return PERSONA_SHY_CHICK, "High latency or frequent re-prompts — needs confidence building"
 
+    # Zippy Sotong: super energetic (very fast, low icons — lacks structure)
+    if latency < 5000 and avg_icons < 2:
+        return PERSONA_ZIPPY_SOTONG, "Very fast but simple icon combos — needs structure"
+
+    # Garang Crab: independent, confident (fast + rich messages)
     if latency < 10000 and re_prompts <= 1 and avg_icons >= 3:
-        return PERSONA_INDEPENDENT, "Fast response, minimal re-prompts, rich icon combos"
+        return PERSONA_GARANG_CRAB, "Fast response, minimal re-prompts, rich icon combos"
 
-    return PERSONA_SOCIAL, "Moderate pace and engagement"
+    # Curious Monkey: playful, exploratory (moderate to fast, varied patterns)
+    if latency < 15000 and avg_icons >= 2:
+        return PERSONA_CURIOUS_MONKEY, "Exploratory and flexible communication style"
+
+    # Steady Turtle: reflective, calm (moderate pace)
+    return PERSONA_STEADY_TURTLE, "Moderate pace and thoughtful engagement"
 
 
 @app.get("/health")
@@ -90,7 +103,13 @@ async def get_profile(user_id: str):
 
 @app.put("/profile/{user_id}")
 async def update_profile(user_id: str, req: ProfileUpdateRequest):
-    valid_personas = {PERSONA_GUIDED, PERSONA_SOCIAL, PERSONA_INDEPENDENT}
+    valid_personas = {
+        PERSONA_SHY_CHICK,
+        PERSONA_STEADY_TURTLE,
+        PERSONA_CURIOUS_MONKEY,
+        PERSONA_ZIPPY_SOTONG,
+        PERSONA_GARANG_CRAB,
+    }
     if req.persona not in valid_personas:
         raise HTTPException(status_code=400, detail=f"Invalid persona. Must be one of: {valid_personas}")
 

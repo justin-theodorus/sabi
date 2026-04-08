@@ -62,33 +62,35 @@ SCENARIO_DESCRIPTIONS = {
 # ── Persona modifiers ────────────────────────────────────────────────────────
 
 PERSONA_PROMPTS = {
-    "guided_learner": (
+    "zippy_sotong": (
+        "The learner is a 'Zippy Sotong': super energetic but lacks structure. "
         "The learner communicates using AAC icon symbols. "
-        "Use very simple language. Speak slowly. Wait patiently for responses. "
-        "Offer gentle encouragement if they seem stuck."
+        "Keep your responses short, fast-paced, and high-energy. "
+        "Use frequent redirections to keep them on track without dampening their enthusiasm."
     ),
-    "social_practice_learner": (
+    "steady_turtle": (
+        "The learner is a 'Steady Turtle': reflective, calm, and moves at a slow pace. "
         "The learner communicates using AAC icon symbols. "
-        "Use moderately paced conversation with some complexity. "
-        "Occasionally prompt them to expand on what they said."
+        "Speak slowly and provide extended wait times for processing. "
+        "Avoid overwhelming them with too much information; keep the vibe peaceful and patient."
     ),
-    "independent_communicator": (
+    "shy_chick": (
+        "The learner is a 'Shy Chick': hesitant with low confidence. "
         "The learner communicates using AAC icon symbols. "
-        "Use fully natural conversational pace. No special concessions. "
-        "Respond naturally as you would to anyone."
+        "Use extremely gentle, affirming language. Offer heavy scaffolding and "
+        "constant positive reinforcement to build their confidence in using the device."
     ),
-    # Fallback aliases from Phase 1 naming
-    "Guided": (
+    "garang_crab": (
+        "The learner is a 'Garang Crab': independent, passionate, and confident. "
         "The learner communicates using AAC icon symbols. "
-        "Use very simple language. Speak slowly. Wait patiently for responses."
+        "Use a direct, bold, and natural conversational tone. "
+        "Challenge them with complex topics and respect their autonomy; don't over-simplify."
     ),
-    "Social Practice": (
+    "curious_monkey": (
+        "The learner is a 'Curious Monkey': playful and likes to 'mess around and find out.' "
         "The learner communicates using AAC icon symbols. "
-        "Use moderately paced conversation with some complexity."
-    ),
-    "Independent": (
-        "The learner communicates using AAC icon symbols. "
-        "Use fully natural conversational pace."
+        "Be flexible and ready for non-linear conversations. "
+        "Incorporate humor and exploration into your prompts, allowing them to experiment with the symbols."
     ),
 }
 
@@ -134,17 +136,24 @@ class Message(BaseModel):
     role: str   # "user" or "assistant"
     content: str
 
+class EmotionContext(BaseModel):
+    summary_emotion: str
+    explanation: str
+    avg_score: float
+
 class DialogueRequest(BaseModel):
     message: str
     history: Optional[List[Message]] = []
     scenario_id: Optional[str] = "hawker_centre"
     mode: Optional[str] = "learning"
-    persona: Optional[str] = "guided_learner"
+    persona: Optional[str] = "zippy_sotong"
     mood_modifier: Optional[str] = None
+    emotion: Optional[EmotionContext] = None
 
 class DialogueResponse(BaseModel):
     response: str
     audio_base64: Optional[str] = None
+    npc_emotion: Optional[str] = None  # NPC's emotion based on response
 
 class HintRequest(BaseModel):
     scenario_id: Optional[str] = "hawker_centre"
@@ -176,9 +185,9 @@ class CompetenceScores(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def build_system_prompt(scenario_id: str, mode: str, persona: str, mood_modifier: Optional[str] = None) -> str:
+def build_system_prompt(scenario_id: str, mode: str, persona: str, mood_modifier: Optional[str] = None, emotion: Optional[EmotionContext] = None) -> str:
     scenario = SCENARIO_PROMPTS.get(scenario_id, SCENARIO_PROMPTS["hawker_centre"])
-    persona_mod = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["guided_learner"])
+    persona_mod = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["zippy_sotong"])
     mode_mod = MODE_PROMPTS.get(mode, "")
 
     parts = [scenario, persona_mod]
@@ -186,8 +195,37 @@ def build_system_prompt(scenario_id: str, mode: str, persona: str, mood_modifier
         parts.append(mode_mod)
     if mood_modifier:
         parts.append(mood_modifier)
+    if emotion:
+        parts.append(
+            f"The learner appears to be {emotion.summary_emotion}. "
+            f"Context: {emotion.explanation} (confidence: {emotion.avg_score:.0f}%). "
+            f"Adjust your response tone and support level accordingly."
+        )
     parts.append("Always respond in English. Use simple, clear language.")
     return "\n".join(filter(None, parts))
+
+
+def detect_npc_emotion(response_text: str) -> str:
+    """
+    Detect the NPC's emotion from their response text.
+    Returns one of the exact image names: happy, sad, mad, confused, surprised, neutral
+    """
+    prompt = f"""Analyze this NPC response and determine which expression the NPC should show.
+Respond with ONLY one of these (lowercase): happy, sad, mad, confused, surprised, neutral
+
+NPC response: "{response_text}"
+
+Expression:"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=20,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    emotion = response.content[0].text.strip().lower().strip('"\'.,;:')
+    valid_emotions = {"happy", "sad", "mad", "confused", "surprised", "neutral"}
+    return emotion if emotion in valid_emotions else "neutral"
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
@@ -204,8 +242,9 @@ async def dialogue(req: DialogueRequest):
     system_prompt = build_system_prompt(
         req.scenario_id or "hawker_centre",
         req.mode or "learning",
-        req.persona or "guided_learner",
+        req.persona or "zippy_sotong",
         req.mood_modifier,
+        emotion=req.emotion,
     )
 
     messages = []
@@ -222,7 +261,8 @@ async def dialogue(req: DialogueRequest):
 
     reply = response.content[0].text
     audio_base64 = text_to_speech_base64(reply, req.scenario_id or "hawker_centre")
-    return DialogueResponse(response=reply, audio_base64=audio_base64)
+    npc_emotion = detect_npc_emotion(reply)
+    return DialogueResponse(response=reply, audio_base64=audio_base64, npc_emotion=npc_emotion)
 
 
 @app.post("/hint", response_model=HintResponse)
@@ -338,3 +378,62 @@ Return ONLY valid JSON with this exact structure:
         )
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse scoring response: {e}")
+
+
+class EmotionSummarizationRequest(BaseModel):
+    emotion_log: str  # Formatted emotion progression
+
+
+class EmotionSummarizationResponse(BaseModel):
+    summary_emotion: str
+    explanation: str
+
+
+@app.post("/summarize-emotion", response_model=EmotionSummarizationResponse)
+async def summarize_emotion(req: EmotionSummarizationRequest):
+    """
+    Analyze emotion progression and return a summary with explanation.
+    Example: neutral → angry (low) → angry (high) → returns "frustrated"
+    """
+    prompt = f"""Analyze this learner's emotion progression during their response to a conversational prompt.
+
+Emotion Progression:
+{req.emotion_log}
+
+Based on this progression, provide:
+1. A single emotion word that captures the overall state (one of: happy, sad, angry, fear, surprise, disgust, neutral, frustrated, confused, content, anxious, excited)
+2. A brief 1-sentence explanation of what the progression shows
+
+Format your response as JSON:
+{{"emotion": "word_here", "explanation": "brief explanation here"}}
+
+Example response:
+{{"emotion": "frustrated", "explanation": "Started neutral but gradually escalated to high anger, indicating growing frustration."}}"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=150,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    import json
+    raw = response.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+    if raw.endswith("```"):
+        raw = raw[:-3].strip()
+
+    try:
+        data = json.loads(raw)
+        return EmotionSummarizationResponse(
+            summary_emotion=data.get("emotion", "neutral").lower().strip('"\''),
+            explanation=data.get("explanation", "").strip(),
+        )
+    except json.JSONDecodeError:
+        return EmotionSummarizationResponse(
+            summary_emotion="neutral",
+            explanation="Could not analyze emotion progression.",
+        )

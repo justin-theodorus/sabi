@@ -8,6 +8,13 @@ export interface Message {
 export interface DialogueResponse {
   response: string
   audio_base64: string | null
+  npc_emotion?: string  // NPC's emotion (happy, sad, mad, confused, etc.)
+}
+
+export interface EmotionContext {
+  summary_emotion: string
+  explanation: string
+  avg_score: number
 }
 
 export interface DialogueOptions {
@@ -15,6 +22,7 @@ export interface DialogueOptions {
   mode?: string
   persona?: string
   mood_modifier?: string
+  emotion?: EmotionContext
 }
 
 export async function sendDialogue(
@@ -30,8 +38,9 @@ export async function sendDialogue(
       history,
       scenario_id: options.scenario_id ?? 'hawker_centre',
       mode: options.mode ?? 'learning',
-      persona: options.persona ?? 'guided_learner',
+      persona: options.persona ?? 'zippy_sotong',
       mood_modifier: options.mood_modifier ?? null,
+      emotion: options.emotion,
     }),
   })
 

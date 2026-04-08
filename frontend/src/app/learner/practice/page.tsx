@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { sendDialogue, judgeResponse, type Message } from '@/lib/dialogue'
+import { summarizeEmotionLog } from '@/lib/emotion-summary'
 import { translateIcons } from '@/lib/aac-translate'
 import { startSession, endSession, logEvent } from '@/lib/session'
 import { uploadSessionVideo } from '@/lib/minio-upload'
@@ -98,6 +99,7 @@ export default function PracticePage() {
   // Gameplay state
   const [selectedIcons, setSelectedIcons] = useState<AACIcon[]>([])
   const [npcResponse, setNpcResponse] = useState<string | null>(scenario.npcGreeting)
+  const [npcEmotion, setNpcEmotion] = useState<string | undefined>(undefined)
   const [npcLoading, setNpcLoading] = useState(false)
   const [history, setHistory] = useState<Message[]>([])
   const [hearts, setHearts] = useState(MAX_HEARTS)
@@ -118,7 +120,7 @@ export default function PracticePage() {
   const { videoRef, canvasRef, captureFrameRef, startWebcam, stopWebcam, captureFrame, startRecording, stopRecording } =
     useWebcam()
 
-  const currentEmotion = useEmotionCapture({
+  const { currentEmotion, getEmotionLog, resetEmotionLog } = useEmotionCapture({
     sessionId,
     token: authToken,
     sessionStartTime: sessionStartTimeRef.current,
@@ -313,7 +315,24 @@ export default function PracticePage() {
         }
       }
 
-      const result = await sendDialogue(message, history, { scenario_id: scenario.id, mode, persona, mood_modifier: moodModifier ?? undefined })
+      // Get and summarize emotions since last response
+      const emotionLog = getEmotionLog()
+      const emotionSummary = await summarizeEmotionLog(emotionLog)
+
+      const result = await sendDialogue(message, history, {
+        scenario_id: scenario.id,
+        mode,
+        persona,
+        mood_modifier: moodModifier ?? undefined,
+        emotion: emotionSummary ? {
+          summary_emotion: emotionSummary.summary_emotion,
+          explanation: emotionSummary.explanation,
+          avg_score: emotionSummary.avg_score,
+        } : undefined,
+      })
+
+      // Reset emotion log for next response cycle
+      resetEmotionLog()
 
       const newHistory: Message[] = [
         ...history,
@@ -322,6 +341,7 @@ export default function PracticePage() {
       ]
       setHistory(newHistory)
       setNpcResponse(result.response)
+      setNpcEmotion(result.npc_emotion)
       messageStartTimeRef.current = Date.now()
 
       if (result.audio_base64) playAudio(result.audio_base64)
@@ -443,6 +463,7 @@ export default function PracticePage() {
               npcLoading={npcLoading}
               backgroundSrc={scenario.background}
               npcSrc={scenario.npc}
+              npcEmotion={npcEmotion}
             />
             {/* Webcam overlay — top-right corner of scenario panel */}
             <div className="absolute top-2 right-2 z-10">

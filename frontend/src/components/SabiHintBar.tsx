@@ -42,15 +42,15 @@ export default function SabiHintBar({ scenarioId, npcLastMessage, visible }: Sab
         <span className="text-yellow-900 font-bold text-xs">S</span>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-yellow-200 text-xs font-semibold mb-0.5">Sabi says:</p>
+        <p className="text-yellow-700 text-xs font-semibold mb-0.5">Sabi says:</p>
         {loading ? (
           <div className="flex gap-1">
-            <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce" />
+            <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+            <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+            <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-bounce" />
           </div>
         ) : (
-          <p className="text-yellow-100 text-sm leading-snug">{hint || 'Think about what you need to say…'}</p>
+          <p className="text-yellow-900 text-sm leading-snug">{hint || 'Think about what you need to say…'}</p>
         )}
       </div>
     </div>
