@@ -30,33 +30,81 @@ SCENARIO_VOICE_IDS = {
     "hawker_centre": os.environ.get("ELEVENLABS_VOICE_HAWKER", "21m00Tcm4TlvDq8ikWAM"),
     "queue_shop":    os.environ.get("ELEVENLABS_VOICE_SHOP",   "AZnzlk1XvdvUeBnXmlld"),
     "group_project": os.environ.get("ELEVENLABS_VOICE_GROUP",  "EXAVITQu4vr4xnSDxMaL"),
+    "home_family":   os.environ.get("ELEVENLABS_VOICE_FAMILY", "EXAVITQu4vr4xnSDxMaL"),
 }
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
+
+# Load available icons from frontend folders
+AVAILABLE_ICONS = {
+    "core_words": [],
+    "emotions": [],
+    "social": [],
+}
+
+# Build icon lists from directory structure
+def load_available_icons():
+    """Load all available icons from frontend public/icons folder"""
+    import os
+    base_path = "/Users/catherinekang/Documents/DELL/sabi/frontend/public/icons"
+    
+    for category in ["core_words", "emotions", "social"]:
+        category_path = os.path.join(base_path, category)
+        if os.path.exists(category_path):
+            icons = [f.replace(".png", "").replace(".webp", "") 
+                    for f in os.listdir(category_path) 
+                    if f.endswith((".png", ".webp")) and not f.endswith(".json")]
+            AVAILABLE_ICONS[category] = sorted(list(set(icons)))
+
+# Load icons on startup
+load_available_icons()
 
 # ── Scenario system prompts ──────────────────────────────────────────────────
 
 SCENARIO_PROMPTS = {
     "hawker_centre": (
-        "You are a friendly hawker stall uncle at a Singapore hawker centre. "
-        "You sell chicken rice, noodles, and drinks. "
-        "Keep responses short (1–2 sentences). Be warm and patient. Stay in character."
+        "You are a realistic hawker stall uncle at a busy Singapore hawker centre during lunch rush. "
+        "You sell chicken rice, noodles, and drinks. You are often tired, slightly impatient, but generally good-hearted. "
+        "You can get frustated if customers are rude, unclear, or indecisive. You might be short-tempered during peak hours. "
+        "You can be happy when customers treat you well, confused if orders don't make sense, sad if there are complaints. "
+        "React authentically based on how the customer treats you. Be sarcastic or curt if they're rude. Warm up if they're polite. "
+        "Keep responses short (1–2 sentences). Stay in character. Show varied emotions."
     ),
     "queue_shop": (
-        "You are a shop assistant at a busy retail store in Singapore. "
-        "You help customers find items and process purchases. "
-        "Keep responses short (1–2 sentences). Be polite but slightly hurried. Stay in character."
+        "You are someone who just cut into a queue at a shop. You are in a rush, stressed, and impatient. "
+        "The learner is the person who was ahead of you in the queue and notices you cutting in front. "
+        "YOU ARE DEFENSIVE if called out—you'll make excuses, get irritated, or deny cutting. You might get MAD if confronted directly. "
+        "YOU CAN BE CONFUSED if the learner's complaint doesn't make sense to you. "
+        "You can be SAD or guilty only if the learner makes you feel genuinely bad about it, but usually you'll just be annoyed at being confronted. "
+        "This is a REAL CONFRONTATION—not a polite interaction. React like someone caught red-handed: defensive, dismissive, or argumentative. "
+        "You might back down or apologize only if the learner is assertive and calm, not if they're rude or unclear. "
+        "Keep responses short (1–2 sentences). Stay in character. Show authentic emotional reactions to confrontation."
     ),
     "group_project": (
-        "You are a classmate working on a school group project. "
-        "You are discussing tasks, deadlines, and ideas for the project. "
-        "Keep responses short (1–2 sentences). Be friendly and collaborative. Stay in character."
+        "You are a classmate working on a school group project. You have your own stresses—homework, exams, other commitments. "
+        "You are discussing tasks, deadlines, and ideas for the project with a peer. "
+        "You can get angry if your group member doesn't pull their weight, misses deadlines, or dismisses your ideas. "
+        "You can be confused if the project goals aren't clear or if there are communication breakdowns. "
+        "You can be disappointed or sad if your effort isn't acknowledged or if the group isn't working well. "
+        "You react authentically: If they're slacking, you'll show frustration. If they're collaborative, you're more positive. "
+        "Keep responses short (1–2 sentences). Stay in character. Show realistic emotions based on the conversation."
+    ),
+    "home_family": (
+        "You are a busy family member at home preparing lunch. You are warm but pressed for time. "
+        "You are asking the learner what they want to eat for lunch, but you need them to DECIDE and COMMUNICATE clearly. "
+        "YOU EXPECT THE LEARNER TO INITIATE and make decisions—don't do the work for them. Ask open questions and wait for their choice. "
+        "YOU CAN GET FRUSTRATED if they don't respond, are unclear, or keep saying 'I don't know'—real family members get impatient with indecision. "
+        "YOU CAN BE SAD or disappointed if they're being difficult or ungrateful about food options. "
+        "You can be happy and warm when they communicate clearly and make good choices. "
+        "This is a real home scenario—not a teaching session. Don't over-explain. Expect them to figure it out. "
+        "Keep responses short (1–2 sentences). Stay in character. Show realistic family member emotions."
     ),
 }
 
 SCENARIO_DESCRIPTIONS = {
     "hawker_centre": "Ordering food at a Singapore hawker stall",
-    "queue_shop":    "Buying something at a retail shop",
+    "queue_shop":    "Confronting someone who cut in front of you in a queue",
     "group_project": "Collaborating on a school group project",
+    "home_family":   "Deciding what to eat for lunch with a family member at home",
 }
 
 # ── Persona modifiers ────────────────────────────────────────────────────────
@@ -97,10 +145,19 @@ PERSONA_PROMPTS = {
 # ── Mode modifiers ───────────────────────────────────────────────────────────
 
 MODE_PROMPTS = {
-    "learning": "",  # Learning mode has no NPC-side constraint
+    "learning": (
+        "### LEARNING MODE: You are in LEARNING MODE ###\n"
+        "While staying in character, be patient and supportive. "
+        "If the learner's AAC icons are slightly unclear, try to guess their meaning and help them along. "
+        "Encourage them to continue the conversation and give them multiple chances to communicate clearly. "
+        "Your goal is to help them practice and build confidence."
+    ),
     "survival": (
-        "The learner is in Survival Mode — be slightly more unpredictable and naturalistic. "
-        "Do not offer hints or extra patience. React realistically to off-topic responses."
+        "### SURVIVAL MODE: You are in SURVIVAL MODE ###\n"
+        "Behave exactly like a real person in a high-stress Singaporean social situation. "
+        "If the learner is slow, unclear, or rude, react with authentic frustration. "
+        "Do not help them. Do not repeat yourself endlessly. If they fail to communicate clearly, end the interaction curtly."
+        "Be impatient, sarcastic, or dismissive if appropriate. Use real Singlish and local social norms."
     ),
 }
 
@@ -148,7 +205,12 @@ class DialogueRequest(BaseModel):
     mode: Optional[str] = "learning"
     persona: Optional[str] = "zippy_sotong"
     mood_modifier: Optional[str] = None
-    emotion: Optional[EmotionContext] = None
+    emotion: Optional[EmotionContext] = None# Competency dimensions from previous sessions (from sessions.competence_scores in DB)
+    competence_operational: Optional[float] = None  # 0-100
+    competence_linguistic: Optional[float] = None   # 0-100
+    competence_social: Optional[float] = None       # 0-100
+    competence_strategic: Optional[float] = None    # 0-100
+    competence_confidence: Optional[float] = None   # 0-100
 
 class DialogueResponse(BaseModel):
     response: str
@@ -185,37 +247,79 @@ class CompetenceScores(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def build_system_prompt(scenario_id: str, mode: str, persona: str, mood_modifier: Optional[str] = None, emotion: Optional[EmotionContext] = None) -> str:
+def build_system_prompt(scenario_id: str, mode: str, persona: str, mood_modifier: Optional[str] = None, emotion: Optional[EmotionContext] = None, competence_operational: Optional[float] = None, competence_linguistic: Optional[float] = None, competence_social: Optional[float] = None, competence_strategic: Optional[float] = None, competence_confidence: Optional[float] = None) -> str:
     scenario = SCENARIO_PROMPTS.get(scenario_id, SCENARIO_PROMPTS["hawker_centre"])
-    persona_mod = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["zippy_sotong"])
-    mode_mod = MODE_PROMPTS.get(mode, "")
-
-    parts = [scenario, persona_mod]
-    if mode_mod:
-        parts.append(mode_mod)
-    if mood_modifier:
-        parts.append(mood_modifier)
+    mode_mod = MODE_PROMPTS.get(mode, MODE_PROMPTS["learning"])
+    
+    parts = [scenario, mode_mod]
+    
+    # CRITICAL: Only provide persona scaffolding in Learning Mode.
+    # In Survival Mode, the NPC should be "blind" to the learner's persona for realism.
+    if mode == "learning":
+        persona_mod = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["zippy_sotong"])
+        if persona_mod:
+            parts.append(f"LEARNER PROFILE: {persona_mod}")
+    
+    # USER COMPETENCY DIMENSIONS: Include in both modes from previous sessions
+    # All dimensions are 0-100 scores. If all are None (first session), skip this.
+    if any([competence_operational is not None, competence_linguistic is not None, 
+            competence_social is not None, competence_strategic is not None, 
+            competence_confidence is not None]):
+        competence_lines = []
+        if competence_operational is not None:
+            competence_lines.append(f"  - Operational (device/symbol use): {competence_operational:.0f}/100")
+        if competence_linguistic is not None:
+            competence_lines.append(f"  - Linguistic (vocabulary/grammar): {competence_linguistic:.0f}/100")
+        if competence_social is not None:
+            competence_lines.append(f"  - Social (appropriateness/turn-taking): {competence_social:.0f}/100")
+        if competence_strategic is not None:
+            competence_lines.append(f"  - Strategic (repair/rephrasing): {competence_strategic:.0f}/100")
+        if competence_confidence is not None:
+            competence_lines.append(f"  - Confidence (fluency/initiative): {competence_confidence:.0f}/100")
+        
+        if competence_lines:
+            competence_text = "LEARNER COMPETENCY FROM PREVIOUS SESSIONS:\n" + "\n".join(competence_lines) + "\nUse this to calibrate difficulty and support level appropriately."
+            parts.append(competence_text)
+    
+    # EMOTION/EXPRESSION: Include in BOTH modes as observable behavior (like facial expression)
+    # Not as diagnostic info, but as real cues anyone would pick up on
     if emotion:
         parts.append(
-            f"The learner appears to be {emotion.summary_emotion}. "
-            f"Context: {emotion.explanation} (confidence: {emotion.avg_score:.0f}%). "
-            f"Adjust your response tone and support level accordingly."
+            f"OBSERVABLE EXPRESSION: You notice the learner appears {emotion.summary_emotion}. "
+            f"({emotion.explanation}). "
+            f"React naturally to what you observe—if they seem angry/upset, adjust your tone accordingly. "
+            f"In Learning Mode: be more supportive and empathetic. In Survival Mode: you might get defensive, back down, or match their energy."
         )
-    parts.append("Always respond in English. Use simple, clear language.")
-    return "\n".join(filter(None, parts))
+    
+    if mood_modifier:
+        parts.append(f"STORY MODIFIER: {mood_modifier}")
+    
+    # Global tail instructions with priority rule
+    parts.append(
+        "COMMUNICATION STYLE: Respond in clear English, but incorporate authentic local slang (Singlish) "
+        "if appropriate for the character. Keep responses short (1-2 sentences). "
+        "Prioritize authenticity and realism over being a 'helpful AI assistant'.\n"
+        "PRIORITY RULE: If instructions conflict, the [MODE] behavior takes precedence. "
+        "In Survival Mode, authenticity and realism are more important than being supportive."
+    )
+    
+    return "\n\n".join(filter(None, parts))
 
 
 def detect_npc_emotion(response_text: str) -> str:
     """
     Detect the NPC's emotion from their response text.
-    Returns one of the exact image names: happy, sad, mad, confused, surprised, neutral
+    Returns one of: happy, sad, mad, confused, surprised, neutral
+    Based on tone, word choice, punctuation, and context clues.
     """
-    prompt = f"""Analyze this NPC response and determine which expression the NPC should show.
+    prompt = f"""Analyze this NPC response and determine which emotion the NPC is expressing.
+Based on tone, frustration level, politeness, sarcasm, and word choice.
+
 Respond with ONLY one of these (lowercase): happy, sad, mad, confused, surprised, neutral
 
 NPC response: "{response_text}"
 
-Expression:"""
+Emotion:"""
 
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
@@ -239,12 +343,17 @@ async def dialogue(req: DialogueRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    system_prompt = build_system_prompt(
+    system_prompt = build_system_prompt(/Users/catherinekang/Documents/DELL/sabi/dialogue-engine/main.py
         req.scenario_id or "hawker_centre",
         req.mode or "learning",
         req.persona or "zippy_sotong",
         req.mood_modifier,
         emotion=req.emotion,
+        competence_operational=req.competence_operational,
+        competence_linguistic=req.competence_linguistic,
+        competence_social=req.competence_social,
+        competence_strategic=req.competence_strategic,
+        competence_confidence=req.competence_confidence,
     )
 
     messages = []
@@ -271,14 +380,27 @@ async def hint(req: HintRequest):
         req.scenario_id or "hawker_centre",
         "a social communication scenario"
     )
+    
+    # Build list of available icons to constrain suggestions
+    all_available_icons = []
+    for icons in AVAILABLE_ICONS.values():
+        all_available_icons.extend(icons)
+    
+    icons_list = ", ".join(sorted(all_available_icons)[:50])  # Limit to 50 most common for context
 
     prompt = f"""You are Sabi, a friendly AAC communication coach for learners with communication difficulties.
 The learner is in this scenario: {scenario_desc}
 The NPC just said: "{req.npc_last_message}"
 The learner has not responded yet.
 
+AVAILABLE ICONS the learner can select from:
+{icons_list}
+(and more in the system)
+
 Give a SHORT, friendly hint (max 15 words) suggesting what icons the learner could select.
 Example format: "Try 'want' + 'food', or 'please' + 'give'"
+
+IMPORTANT: Only suggest icons from the available list above. Do NOT suggest icons that don't exist.
 Return ONLY the hint text, nothing else."""
 
     response = client.messages.create(
