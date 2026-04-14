@@ -361,7 +361,16 @@ export default function SessionReportPage() {
             </div>
             <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
               <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">Video</p>
-              <p className="text-gray-900 text-2xl font-extrabold">{session.video_url ? '✓' : '—'}</p>
+              {session.video_url ? (
+                <Link
+                  href={`/therapist/sessions/${sessionId}/recording`}
+                  className="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 bg-gray-900 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition-colors"
+                >
+                  ▶ Watch
+                </Link>
+              ) : (
+                <p className="text-gray-900 text-2xl font-extrabold">—</p>
+              )}
             </div>
           </div>
 

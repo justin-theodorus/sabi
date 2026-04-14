@@ -22,12 +22,18 @@ export default function ScenarioStage({
   const [bgError, setBgError] = useState(false);
   const [npcError, setNpcError] = useState(false);
 
-  // Determine NPC image path based on emotion
+  // Determine NPC image path based on emotion.
+  // Always use the real uncle emotion images; fall back to neutral when no emotion is detected yet.
   const getNpcImagePath = () => {
     if (npcEmotion) {
       return `/npc/uncle/${npcEmotion}.png`;
     }
-    return npcSrc;
+    // If the caller provided a non-default npcSrc (i.e. a different scenario's NPC),
+    // use it. Otherwise default to the uncle neutral shot.
+    if (npcSrc && npcSrc !== '/npc/hawker-uncle.png') {
+      return npcSrc;
+    }
+    return '/npc/uncle/neutral.png';
   };
 
   const npcImageSrc = getNpcImagePath();
@@ -51,10 +57,10 @@ export default function ScenarioStage({
         </div>
       )}
 
-      {/* z=3: NPC photo — anchored to bottom so feet touch the ground */}
+      {/* z=3: NPC photo — anchored to bottom, sized to show full figure */}
       <div
-        className="absolute left-1/2 -translate-x-1/2 w-[160%]"
-        style={{ zIndex: 3, bottom: 0, height: "260%" }}
+        className="absolute left-1/2 -translate-x-1/2 w-[72%]"
+        style={{ zIndex: 3, bottom: 0, height: "92%" }}
       >
         {!npcError && (
           <Image
