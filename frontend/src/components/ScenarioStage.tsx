@@ -1,36 +1,36 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Image from 'next/image'
-import SpeechBubble from './SpeechBubble'
+import { useState } from "react";
+import Image from "next/image";
+import SpeechBubble from "./SpeechBubble";
 
 interface ScenarioStageProps {
-  npcResponse: string | null
-  npcLoading: boolean
-  backgroundSrc?: string
-  npcSrc?: string
-  npcEmotion?: string  // NPC's current emotion (happy, sad, mad, confused, surprised, neutral)
+  npcResponse: string | null;
+  npcLoading: boolean;
+  backgroundSrc?: string;
+  npcSrc?: string;
+  npcEmotion?: string; // NPC's current emotion (happy, sad, mad, confused, surprised, neutral)
 }
 
 export default function ScenarioStage({
   npcResponse,
   npcLoading,
-  backgroundSrc = '/backgrounds/hawker-centre.jpg',
-  npcSrc = '/npc/hawker-uncle.png',
+  backgroundSrc = "/backgrounds/hawker-centre.jpg",
+  npcSrc = "/npc/hawker-uncle.png",
   npcEmotion,
 }: ScenarioStageProps) {
-  const [bgError, setBgError] = useState(false)
-  const [npcError, setNpcError] = useState(false)
+  const [bgError, setBgError] = useState(false);
+  const [npcError, setNpcError] = useState(false);
 
   // Determine NPC image path based on emotion
   const getNpcImagePath = () => {
     if (npcEmotion) {
-      return `/npc/uncle/${npcEmotion}.png`
+      return `/npc/uncle/${npcEmotion}.png`;
     }
-    return npcSrc
-  }
+    return npcSrc;
+  };
 
-  const npcImageSrc = getNpcImagePath()
+  const npcImageSrc = getNpcImagePath();
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-xl">
@@ -51,17 +51,17 @@ export default function ScenarioStage({
         </div>
       )}
 
-      {/* z=3: NPC photo — tall container anchored from top, feet clip off at stage bottom */}
+      {/* z=3: NPC photo — anchored to bottom so feet touch the ground */}
       <div
-        className="absolute left-1/2 -translate-x-1/2 w-[75%]"
-        style={{ zIndex: 3, top: '15%', height: '130%' }}
+        className="absolute left-1/2 -translate-x-1/2 w-[160%]"
+        style={{ zIndex: 3, bottom: 0, height: "260%" }}
       >
         {!npcError && (
           <Image
             src={npcImageSrc}
             alt="NPC character"
             fill
-            className="object-contain object-top transition-all duration-300"
+            className="object-contain object-bottom transition-all duration-300"
             onError={() => setNpcError(true)}
           />
         )}
@@ -75,5 +75,5 @@ export default function ScenarioStage({
       {/* z=4: Speech bubble */}
       <SpeechBubble text={npcResponse} loading={npcLoading} />
     </div>
-  )
+  );
 }

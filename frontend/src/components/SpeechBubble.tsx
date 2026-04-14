@@ -9,8 +9,7 @@ export default function SpeechBubble({ text, loading }: SpeechBubbleProps) {
   return (
     <div
       className="absolute left-1/2 -translate-x-1/2 w-[80%] max-w-lg"
-      style={{ top: '8%' }}
-      style={{ zIndex: 4 }}
+      style={{ top: '8%', zIndex: 4 }}
     >
       <div className="bg-white text-gray-900 rounded-2xl px-5 py-4 shadow-xl relative text-base leading-snug">
         {loading ? (
