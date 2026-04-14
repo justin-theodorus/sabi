@@ -702,6 +702,42 @@ app.post('/sessions/:id/video', upload.single('file'), async (req, res) => {
   }
 })
 
+// GET /sessions/:id/events — fetch session event log (transcript source)
+app.get('/sessions/:id/events', async (req, res) => {
+  try {
+    await verifyToken(req)
+    const { id } = req.params
+    const { data, error } = await supabase
+      .from('session_events')
+      .select('id, event_type, payload, timestamp')
+      .eq('session_id', id)
+      .order('timestamp', { ascending: true })
+    if (error) throw error
+    res.json(data || [])
+  } catch (err) {
+    console.error('GET /sessions/:id/events error:', err.message)
+    res.status(err.message.includes('token') ? 401 : 500).json({ error: err.message })
+  }
+})
+
+// GET /sessions/:id/emotions — fetch emotion event timeline
+app.get('/sessions/:id/emotions', async (req, res) => {
+  try {
+    await verifyToken(req)
+    const { id } = req.params
+    const { data, error } = await supabase
+      .from('emotion_events')
+      .select('id, session_offset_ms, dominant_emotion, scores, created_at')
+      .eq('session_id', id)
+      .order('session_offset_ms', { ascending: true })
+    if (error) throw error
+    res.json(data || [])
+  } catch (err) {
+    console.error('GET /sessions/:id/emotions error:', err.message)
+    res.status(err.message.includes('token') ? 401 : 500).json({ error: err.message })
+  }
+})
+
 // GET /sessions/:id/video-url — generate a 1-hour presigned URL for the session video
 app.get('/sessions/:id/video-url', async (req, res) => {
   try {
