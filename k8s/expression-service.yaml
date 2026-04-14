@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: expression-service
+  namespace: sabi
+spec:
+  replicas: 1          # HPA manages scaling — starts at 1, scales to 5
+  selector:
+    matchLabels:
+      app: expression-service
+  template:
+    metadata:
+      labels:
+        app: expression-service
+    spec:
+      containers:
+        - name: expression-service
+          image: sabi/expression-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8003
+          resources:
+            requests:
+              cpu: "500m"      # HPA uses this as the baseline for utilization %
+              memory: "1Gi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 20   # DeepFace model warmup takes ~15s
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: expression-service
+  namespace: sabi
+spec:
+  selector:
+    app: expression-service
+  ports:
+    - port: 8003
+      targetPort: 8003
+  # ClusterIP (default) — Kong load-balances across all healthy pods round-robin
+---
+# HPA: scale expression-service pods when CPU hits 60%
+# Stress test shows: 1 pod saturates at ~15 concurrent sessions
+# With HPA: 3 pods handle ~45 sessions at the same latency
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: expression-service-hpa
+  namespace: sabi
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: expression-service
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30    # React quickly to load spikes
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30             # Add up to 2 pods every 30s
+    scaleDown:
+      stabilizationWindowSeconds: 300   # Wait 5 min before scaling down
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60             # Remove 1 pod per minute

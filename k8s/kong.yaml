@@ -1,0 +1,145 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: sabi
+data:
+  kong.yml: |
+    _format_version: "3.0"
+
+    services:
+      - name: dialogue-engine
+        url: http://dialogue-engine:8001
+        connect_timeout: 5000
+        read_timeout: 30000
+        write_timeout: 10000
+        routes:
+          - name: dialogue-routes
+            paths: ["/dialogue", "/hint", "/judge", "/score-session", "/summarize-emotion"]
+            strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 30
+              policy: local
+              limit_by: ip
+
+      - name: expression-service
+        url: http://expression-service:8003
+        connect_timeout: 3000
+        read_timeout: 10000
+        write_timeout: 5000
+        routes:
+          - name: expression-routes
+            paths: ["/analyze-frame"]
+            strip_path: false
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 120
+              policy: local
+              limit_by: ip
+
+      - name: session-service
+        url: http://session-service:8004
+        connect_timeout: 5000
+        read_timeout: 60000
+        write_timeout: 60000
+        routes:
+          - name: session-routes
+            paths: ["/sessions"]
+            strip_path: false
+
+      - name: persona-engine
+        url: http://persona-engine:8002
+        routes:
+          - name: persona-routes
+            paths: ["/classify", "/profile"]
+            strip_path: false
+
+      - name: aac-icon-service
+        url: http://aac-icon-service:8005
+        routes:
+          - name: aac-routes
+            paths: ["/translate"]
+            strip_path: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: sabi
+spec:
+  replicas: 2          # 2 Kong replicas for gateway HA
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+    spec:
+      containers:
+        - name: kong
+          image: kong:3.6-ubuntu
+          ports:
+            - containerPort: 8000   # Proxy
+            - containerPort: 8001   # Admin API
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: "/kong/declarative/kong.yml"
+            - name: KONG_PROXY_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_ADMIN_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_PROXY_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_LISTEN
+              value: "0.0.0.0:8001"
+          volumeMounts:
+            - name: kong-config
+              mountPath: /kong/declarative
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: kong-config
+          configMap:
+            name: kong-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: sabi
+spec:
+  selector:
+    app: kong
+  type: LoadBalancer    # Exposes Kong as the external entry point
+  ports:
+    - name: proxy
+      port: 80
+      targetPort: 8000
+    - name: proxy-ssl
+      port: 443
+      targetPort: 8443

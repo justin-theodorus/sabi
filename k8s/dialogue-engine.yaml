@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dialogue-engine
+  namespace: sabi
+spec:
+  replicas: 2          # Stateless — 2 replicas for availability; Claude API is the real bottleneck
+  selector:
+    matchLabels:
+      app: dialogue-engine
+  template:
+    metadata:
+      labels:
+        app: dialogue-engine
+    spec:
+      containers:
+        - name: dialogue-engine
+          image: sabi/dialogue-engine:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sabi-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: ELEVENLABS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sabi-secrets
+                  key: ELEVENLABS_API_KEY
+            - name: SUPABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sabi-secrets
+                  key: SUPABASE_URL
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sabi-secrets
+                  key: SUPABASE_SECRET_KEY
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: sabi-config
+                  key: REDIS_URL
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dialogue-engine
+  namespace: sabi
+spec:
+  selector:
+    app: dialogue-engine
+  ports:
+    - port: 8001
+      targetPort: 8001

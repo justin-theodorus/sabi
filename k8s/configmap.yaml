@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sabi-config
+  namespace: sabi
+data:
+  MINIO_ENDPOINT: "minio"
+  MINIO_PUBLIC_URL: "http://minio:9000"
+  MINIO_BUCKET: "session-videos"
+  REDIS_URL: "redis://redis:6379"
+  # Service URLs — internal cluster DNS
+  NEXT_PUBLIC_DIALOGUE_URL: "http://kong:8000"
+  NEXT_PUBLIC_SESSION_URL: "http://kong:8000"
+  NEXT_PUBLIC_PERSONA_URL: "http://kong:8000"
+  NEXT_PUBLIC_EXPRESSION_URL: "http://kong:8000"
+  NEXT_PUBLIC_AAC_URL: "http://kong:8000"

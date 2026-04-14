@@ -1,0 +1,120 @@
+_format_version: "3.0"
+
+# ── Services & Routes ─────────────────────────────────────────────────────────
+# Kong acts as the single entry point (port 8000).
+# All frontend NEXT_PUBLIC_*_URL vars point to http://localhost:8000.
+# Paths are unique across services so no prefix-stripping is needed.
+
+services:
+  # Dialogue Engine — most expensive endpoint (Claude API per call)
+  - name: dialogue-engine
+    url: http://dialogue-engine:8001
+    connect_timeout: 5000
+    read_timeout: 30000   # Claude can take up to ~10s; give headroom
+    write_timeout: 10000
+    routes:
+      - name: dialogue-routes
+        paths:
+          - /dialogue
+          - /hint
+          - /judge
+          - /score-session
+          - /summarize-emotion
+        strip_path: false
+        preserve_host: false
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 30          # Max 30 Claude API calls/min per IP
+          policy: local
+          limit_by: ip
+          hide_client_headers: false
+          error_message: "Rate limit exceeded: max 30 dialogue requests per minute."
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: [GET, POST, OPTIONS]
+          headers: [Content-Type, Authorization]
+
+  # Expression Service — compute-heavy, rate-limited to 2 frames/sec per IP
+  - name: expression-service
+    url: http://expression-service:8003
+    connect_timeout: 3000
+    read_timeout: 10000
+    write_timeout: 5000
+    routes:
+      - name: expression-routes
+        paths:
+          - /analyze-frame
+        strip_path: false
+        preserve_host: false
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 120         # 2 frames/sec per IP (matches 1s capture interval + buffer)
+          policy: local
+          limit_by: ip
+          error_message: "Rate limit exceeded: max 120 frame analysis requests per minute."
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: [GET, POST, OPTIONS]
+          headers: [Content-Type, Authorization]
+
+  # Session Service — on-prem (handles MinIO video + Supabase session events)
+  - name: session-service
+    url: http://session-service:8004
+    connect_timeout: 5000
+    read_timeout: 60000     # Video uploads can be large
+    write_timeout: 60000
+    routes:
+      - name: session-routes
+        paths:
+          - /sessions
+        strip_path: false
+        preserve_host: false
+    plugins:
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: [GET, POST, PUT, OPTIONS]
+          headers: [Content-Type, Authorization]
+
+  # Persona Engine
+  - name: persona-engine
+    url: http://persona-engine:8002
+    connect_timeout: 3000
+    read_timeout: 10000
+    write_timeout: 5000
+    routes:
+      - name: persona-routes
+        paths:
+          - /classify
+          - /profile
+        strip_path: false
+        preserve_host: false
+    plugins:
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: [GET, POST, PUT, OPTIONS]
+          headers: [Content-Type, Authorization]
+
+  # AAC Icon Service
+  - name: aac-icon-service
+    url: http://aac-icon-service:8005
+    connect_timeout: 3000
+    read_timeout: 10000
+    write_timeout: 5000
+    routes:
+      - name: aac-routes
+        paths:
+          - /translate
+        strip_path: false
+        preserve_host: false
+    plugins:
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: [GET, POST, OPTIONS]
+          headers: [Content-Type, Authorization]
