@@ -5,7 +5,7 @@ import { useState } from 'react'
 export interface AACIcon {
   id: string
   label: string
-  category: 'core_words' | 'social' | 'emotions'
+  category: 'core_words' | 'social' | 'emotions' | 'scenario'
   imageUrl: string
 }
 
@@ -14,7 +14,7 @@ const cw = (id: string, ext = 'png'): string => `/icons/core_words/${id}.${ext}`
 const sc = (id: string, ext = 'png'): string => `/icons/social/${id}.${ext}`
 const em = (id: string, ext = 'png'): string => `/icons/emotions/${id}.${ext}`
 
-const ICONS: AACIcon[] = [
+export const ICONS: AACIcon[] = [
 
   // ── Core Words ─ pronouns & questions ─────────────────────────────────────
   { id: 'i',           label: 'I',          category: 'core_words', imageUrl: cw('i') },
@@ -155,7 +155,7 @@ const ICONS: AACIcon[] = [
   { id: 'fulfilled',    label: 'fulfilled',   category: 'emotions', imageUrl: em('fulfilled') },
 ]
 
-type Category = 'core_words' | 'social' | 'emotions'
+type Category = 'core_words' | 'social' | 'emotions' | 'scenario'
 
 const CATEGORY_META: Record<Category, { label: string; tabColor: string; cellBg: string; cellBorder: string; labelColor: string; activeTab: string }> = {
   core_words: {
@@ -182,24 +182,52 @@ const CATEGORY_META: Record<Category, { label: string; tabColor: string; cellBg:
     labelColor: 'text-pink-900',
     activeTab: 'bg-pink-500 text-white border-pink-600 shadow-md',
   },
+  scenario: {
+    label: 'Scenario',
+    tabColor: 'bg-orange-500 text-white border-orange-600',
+    cellBg: 'bg-orange-50 border-orange-300',
+    cellBorder: 'border-orange-400',
+    labelColor: 'text-orange-900',
+    activeTab: 'bg-orange-500 text-white border-orange-600 shadow-md',
+  },
 }
 
 interface AACBoardProps {
   onIconSelect: (icon: AACIcon) => void
   selectedIds: string[]
+  scenarioIcons?: Array<{ id: string; label: string }>
 }
 
-export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
-  const [activeCategory, setActiveCategory] = useState<Category>('core_words')
+export default function AACBoard({ onIconSelect, selectedIds, scenarioIcons }: AACBoardProps) {
+  const [activeCategory, setActiveCategory] = useState<Category>(() =>
+    scenarioIcons && scenarioIcons.length > 0 ? 'scenario' : 'core_words'
+  )
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
 
-  const filtered = ICONS.filter((i) => i.category === activeCategory)
+  const hasScenario = scenarioIcons && scenarioIcons.length > 0
+
+  // Build scenario icon objects, trying core_words path first (graceful fallback on error)
+  const scenarioIconObjects: AACIcon[] = hasScenario
+    ? scenarioIcons.map((si) => ({
+        id: `scenario-${si.id}`,
+        label: si.label,
+        category: 'scenario' as const,
+        imageUrl: `/icons/core_words/${si.id}.png`,
+      }))
+    : []
+
+  const allIcons = [...ICONS, ...scenarioIconObjects]
+  const filtered = allIcons.filter((i) => i.category === activeCategory)
+
+  const visibleCategories = hasScenario
+    ? (['scenario', 'core_words', 'social', 'emotions'] as Category[])
+    : (['core_words', 'social', 'emotions'] as Category[])
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Category Tabs */}
       <div className="flex gap-0 flex-shrink-0 border-b border-gray-200">
-        {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
+        {visibleCategories.map((cat) => {
           const m = CATEGORY_META[cat]
           const active = activeCategory === cat
           return (

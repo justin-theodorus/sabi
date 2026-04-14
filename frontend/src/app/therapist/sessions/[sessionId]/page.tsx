@@ -198,7 +198,7 @@ export default function SessionReportPage() {
         .from('session_events')
         .select('id, event_type, payload, timestamp')
         .eq('session_id', sessionId)
-        .in('event_type', ['icon_selection', 'npc_response'])
+        .in('event_type', ['icon_selection', 'npc_response', 'heart_lost'])
         .order('timestamp', { ascending: true }),
     ])
 
@@ -282,6 +282,21 @@ export default function SessionReportPage() {
   const scenarioName = SCENARIOS[session.scenario_id]?.title ?? session.scenario_id
   const scores = session.competence_scores
 
+  // ── Behavioral metrics derived from session_events ───────────────────────
+  const iconSelectionEvents = sessionEvents.filter((e) => e.event_type === 'icon_selection')
+  const timeoutEvents = sessionEvents.filter(
+    (e) => e.event_type === 'heart_lost' && (e.payload.reason as string) === 'timeout'
+  )
+  const latencies = iconSelectionEvents
+    .map((e) => e.payload.response_latency_ms as number | null)
+    .filter((v): v is number => typeof v === 'number' && v > 0)
+  const avgLatencyMs = latencies.length > 0
+    ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+    : null
+  const repairAttempts = iconSelectionEvents.filter((e) => e.payload.is_repair === true).length
+  const promptsNeeded = repairAttempts + timeoutEvents.length
+  const initiatedFirstTurn = iconSelectionEvents.some((e) => (e.payload.turn_index as number) === 0)
+
   const radarData = scores
     ? [
         { dimension: 'Operational', value: scores.operational },
@@ -313,6 +328,22 @@ export default function SessionReportPage() {
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
 
+        {/* Watch Recording CTA */}
+        {session.video_url && (
+          <div className="bg-purple-900/30 border border-purple-700/50 rounded-xl px-5 py-4 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-purple-200">Session recording available</div>
+              <div className="text-xs text-purple-400 mt-0.5">Watch with live emotion overlay and synced transcript</div>
+            </div>
+            <Link
+              href={`/therapist/sessions/${sessionId}/recording`}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors whitespace-nowrap flex items-center gap-2"
+            >
+              ▶ Watch Recording
+            </Link>
+          </div>
+        )}
+
         {/* Stats bar */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
@@ -328,6 +359,40 @@ export default function SessionReportPage() {
             </div>
           ))}
         </div>
+
+        {/* Behavioral Metrics */}
+        {iconSelectionEvents.length > 0 && (
+          <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
+            <h2 className="text-base font-semibold mb-1">Behavioral Metrics</h2>
+            <p className="text-xs text-gray-400 mb-5">Measured across {iconSelectionEvents.length} learner turns</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+                <div className="text-xs text-gray-400 mb-1">Avg Response Time</div>
+                <div className="text-2xl font-bold text-white">
+                  {avgLatencyMs !== null ? `${(avgLatencyMs / 1000).toFixed(1)}s` : '—'}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">time from NPC message to learner submit</div>
+              </div>
+              <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+                <div className="text-xs text-gray-400 mb-1">Prompts Needed</div>
+                <div className="text-2xl font-bold text-white">{promptsNeeded}</div>
+                <div className="text-xs text-gray-500 mt-1">timeouts + re-attempts after confusion</div>
+              </div>
+              <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+                <div className="text-xs text-gray-400 mb-1">Initiated Communication</div>
+                <div className={`text-2xl font-bold ${initiatedFirstTurn ? 'text-green-400' : 'text-red-400'}`}>
+                  {initiatedFirstTurn ? 'Yes' : 'No'}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">responded to NPC opening without re-prompt</div>
+              </div>
+              <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+                <div className="text-xs text-gray-400 mb-1">Repair Attempts</div>
+                <div className="text-2xl font-bold text-white">{repairAttempts}</div>
+                <div className="text-xs text-gray-500 mt-1">re-tried after NPC didn&apos;t understand</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Competence Radar Chart */}
         <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">

@@ -35,6 +35,22 @@ export async function endSession(
   })
 }
 
+export async function updateSessionState(
+  token: string,
+  sessionId: string,
+  state: { hearts?: number; turn_index?: number }
+): Promise<void> {
+  try {
+    await fetch(`${SESSION_URL}/sessions/${sessionId}/state`, {
+      method: 'PUT',
+      headers: await authHeaders(token),
+      body: JSON.stringify(state),
+    })
+  } catch {
+    // Non-critical — Redis state is best-effort
+  }
+}
+
 export async function logEvent(
   token: string,
   sessionId: string,

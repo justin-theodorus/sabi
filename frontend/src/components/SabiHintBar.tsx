@@ -7,9 +7,10 @@ interface SabiHintBarProps {
   scenarioId: string
   npcLastMessage: string | null
   visible: boolean
+  availableIcons?: string[]
 }
 
-export default function SabiHintBar({ scenarioId, npcLastMessage, visible }: SabiHintBarProps) {
+export default function SabiHintBar({ scenarioId, npcLastMessage, visible, availableIcons = [] }: SabiHintBarProps) {
   const [hint, setHint] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
@@ -20,7 +21,7 @@ export default function SabiHintBar({ scenarioId, npcLastMessage, visible }: Sab
     // Delay hint by 4s so learner has a chance to respond first
     const timer = setTimeout(async () => {
       setLoading(true)
-      const h = await fetchHint(scenarioId, npcLastMessage)
+      const h = await fetchHint(scenarioId, npcLastMessage, availableIcons)
       if (!cancelled) {
         setHint(h)
         setLoading(false)
@@ -32,7 +33,7 @@ export default function SabiHintBar({ scenarioId, npcLastMessage, visible }: Sab
       clearTimeout(timer)
       setHint('')
     }
-  }, [npcLastMessage, visible, scenarioId])
+  }, [npcLastMessage, visible, scenarioId, availableIcons])
 
   if (!visible) return null
 

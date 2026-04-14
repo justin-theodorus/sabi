@@ -7,13 +7,13 @@ import { supabase } from '@/lib/supabase'
 import { sendDialogue, judgeResponse, type Message } from '@/lib/dialogue'
 import { summarizeEmotionLog } from '@/lib/emotion-summary'
 import { translateIcons } from '@/lib/aac-translate'
-import { startSession, endSession, logEvent } from '@/lib/session'
+import { startSession, endSession, logEvent, updateSessionState } from '@/lib/session'
 import { uploadSessionVideo } from '@/lib/minio-upload'
 import { SCENARIOS } from '@/lib/scenarios'
 import { useWebcam } from '@/hooks/useWebcam'
 import { useEmotionCapture } from '@/hooks/useEmotionCapture'
 import ScenarioStage from '@/components/ScenarioStage'
-import AACBoard, { type AACIcon } from '@/components/AACBoard'
+import AACBoard, { ICONS, type AACIcon } from '@/components/AACBoard'
 import MessageBar from '@/components/MessageBar'
 import HeartsBar from '@/components/HeartsBar'
 import SabiHintBar from '@/components/SabiHintBar'
@@ -26,6 +26,12 @@ const MAX_HEARTS = 5
 
 // Default to hawker centre; can be extended to read from sessionStorage/URL params
 const scenario = SCENARIOS.hawker_centre
+
+// All icon labels available on the board for this scenario (used to constrain hint suggestions)
+const allAvailableIconLabels = [
+  ...ICONS.map((i) => i.label),
+  ...scenario.scenarioIcons.map((i) => i.label),
+]
 
 function playAudio(base64: string) {
   try {
@@ -109,10 +115,13 @@ export default function PracticePage() {
   const [webcamActive, setWebcamActive] = useState(false)
   const sessionStartTimeRef = useRef<number>(0)
 
-  // Metrics for persona classification
+  // Metrics for persona classification + behavioral tracking
   const messageStartTimeRef = useRef<number | null>(null)
   const latencySamplesRef = useRef<number[]>([])
   const iconCountSamplesRef = useRef<number[]>([])
+  const turnIndexRef = useRef<number>(0)
+  const repromptCountRef = useRef<number>(0)
+  const lastNpcEmotionRef = useRef<string | undefined>(undefined)
 
   // Survival timeout
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -184,6 +193,8 @@ export default function PracticePage() {
     setHearts((prev) => {
       const next = prev - 1
       if (next <= 0) endSessionFlow(0)
+      // Push updated hearts to Redis (fire-and-forget)
+      if (sessionId && authToken) updateSessionState(authToken, sessionId, { hearts: next })
       return next
     })
     if (sessionId && authToken) {
@@ -240,7 +251,7 @@ export default function PracticePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               avg_response_latency_ms: avg_latency,
-              re_prompt_count: 0,
+              re_prompt_count: repromptCountRef.current,
               avg_icons_per_message: avg_icons,
             }),
           }
@@ -285,9 +296,16 @@ export default function PracticePage() {
     const iconsUsed = [...selectedIcons]
     iconCountSamplesRef.current.push(iconsUsed.length)
 
-    if (messageStartTimeRef.current !== null) {
-      latencySamplesRef.current.push(Date.now() - messageStartTimeRef.current)
+    const responseLatencyMs = messageStartTimeRef.current !== null
+      ? Date.now() - messageStartTimeRef.current
+      : null
+    if (responseLatencyMs !== null) {
+      latencySamplesRef.current.push(responseLatencyMs)
     }
+
+    // A repair attempt is when the learner re-responds after the NPC was confused
+    const isRepair = lastNpcEmotionRef.current === 'confused'
+    if (isRepair) repromptCountRef.current += 1
 
     const message = await translateIcons(iconsUsed.map((i) => i.label))
 
@@ -299,6 +317,10 @@ export default function PracticePage() {
       logEvent(authToken, sessionId, 'icon_selection', {
         icons: iconsUsed.map((i) => i.label),
         translated: message,
+        turn_index: turnIndexRef.current,
+        response_latency_ms: responseLatencyMs,
+        icon_count: iconsUsed.length,
+        is_repair: isRepair,
       })
     }
 
@@ -342,7 +364,13 @@ export default function PracticePage() {
       setHistory(newHistory)
       setNpcResponse(result.response)
       setNpcEmotion(result.npc_emotion)
+      lastNpcEmotionRef.current = result.npc_emotion
+      turnIndexRef.current += 1
       messageStartTimeRef.current = Date.now()
+      // Push updated turn index to Redis (fire-and-forget)
+      if (sessionId && authToken) {
+        updateSessionState(authToken, sessionId, { turn_index: turnIndexRef.current })
+      }
 
       if (result.audio_base64) playAudio(result.audio_base64)
 
@@ -480,6 +508,7 @@ export default function PracticePage() {
               scenarioId={scenario.id}
               npcLastMessage={npcResponse}
               visible={!npcLoading && !!npcResponse}
+              availableIcons={allAvailableIconLabels}
             />
           )}
         </div>
@@ -490,6 +519,7 @@ export default function PracticePage() {
             <AACBoard
               onIconSelect={handleIconSelect}
               selectedIds={selectedIcons.map((i) => i.id)}
+              scenarioIcons={scenario.scenarioIcons}
             />
           </div>
           <div className="flex-shrink-0">

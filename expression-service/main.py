@@ -1,4 +1,4 @@
-import io
+import asyncio
 import numpy as np
 import cv2
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -61,12 +61,16 @@ async def analyze_frame(file: UploadFile = File(...)):
         if img is None:
             raise HTTPException(status_code=400, detail="Could not decode image")
 
-        result = DeepFace.analyze(
-            img,
-            actions=["emotion"],
-            enforce_detection=False,
-            detector_backend="opencv",
-            silent=True,
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: DeepFace.analyze(
+                img,
+                actions=["emotion"],
+                enforce_detection=False,
+                detector_backend="opencv",
+                silent=True,
+            ),
         )
 
         # DeepFace returns a list when multiple faces found; take the first

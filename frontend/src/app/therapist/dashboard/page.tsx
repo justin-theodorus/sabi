@@ -110,12 +110,20 @@ export default function TherapistDashboard() {
           </div>
           <h1 className="text-xl font-bold">Therapist Dashboard</h1>
         </div>
-        <button
-          onClick={handleSignOut}
-          className="text-gray-400 hover:text-white text-sm transition-colors"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/therapist/scenarios"
+            className="text-gray-400 hover:text-white text-sm transition-colors"
+          >
+            Scenarios
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="text-gray-400 hover:text-white text-sm transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
@@ -194,7 +202,13 @@ export default function TherapistDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       {s.video_url ? (
-                        <span className="text-green-400 text-xs">✓</span>
+                        <Link
+                          href={`/therapist/sessions/${s.id}/recording`}
+                          className="text-purple-400 hover:text-purple-300 text-xs transition-colors"
+                          title="Watch recording"
+                        >
+                          ▶ Watch
+                        </Link>
                       ) : (
                         <span className="text-gray-600 text-xs">—</span>
                       )}

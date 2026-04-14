@@ -50,13 +50,14 @@ export async function sendDialogue(
 
 export async function fetchHint(
   scenario_id: string,
-  npc_last_message: string
+  npc_last_message: string,
+  available_icons: string[] = []
 ): Promise<string> {
   try {
     const res = await fetch(`${DIALOGUE_URL}/hint`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scenario_id, npc_last_message }),
+      body: JSON.stringify({ scenario_id, npc_last_message, available_icons }),
     })
     if (!res.ok) return ''
     const data = await res.json()
