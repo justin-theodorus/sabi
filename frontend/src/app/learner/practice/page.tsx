@@ -1,541 +1,237 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import dynamic from 'next/dynamic'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { sendDialogue, judgeResponse, type Message } from '@/lib/dialogue'
-import { summarizeEmotionLog } from '@/lib/emotion-summary'
-import { translateIcons } from '@/lib/aac-translate'
-import { startSession, endSession, logEvent, updateSessionState } from '@/lib/session'
-import { uploadSessionVideo } from '@/lib/minio-upload'
-import { SCENARIOS } from '@/lib/scenarios'
-import { useWebcam } from '@/hooks/useWebcam'
-import { useEmotionCapture } from '@/hooks/useEmotionCapture'
-import ScenarioStage from '@/components/ScenarioStage'
-import AACBoard, { ICONS, type AACIcon } from '@/components/AACBoard'
-import MessageBar from '@/components/MessageBar'
-import HeartsBar from '@/components/HeartsBar'
-import SabiHintBar from '@/components/SabiHintBar'
+import { SCENARIO_LIST } from '@/lib/scenarios'
+import { LearnerHeader, LearnerBottomNav } from '@/components/LearnerNav'
 
-// Dynamic import avoids SSR crash from MediaPipe browser APIs
-const WebcamOverlay = dynamic(() => import('@/components/WebcamOverlay'), { ssr: false })
+const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
-const SURVIVAL_TIMEOUT_MS = 30_000
-const MAX_HEARTS = 5
-
-// Default to hawker centre; can be extended to read from sessionStorage/URL params
-const scenario = SCENARIOS.hawker_centre
-
-// All icon labels available on the board for this scenario (used to constrain hint suggestions)
-const allAvailableIconLabels = [
-  ...ICONS.map((i) => i.label),
-  ...scenario.scenarioIcons.map((i) => i.label),
-]
-
-function playAudio(base64: string) {
-  try {
-    const audio = new Audio(`data:audio/mp3;base64,${base64}`)
-    audio.play().catch(() => {})
-  } catch {}
+const SCENE_META: Record<string, { emoji: string; bg: string }> = {
+  hawker_centre: { emoji: '🍜', bg: 'bg-[#FFF8E7]' },
+  group_project:  { emoji: '📚', bg: 'bg-[#E8F4F8]' },
+  queue_shop:     { emoji: '🛍️', bg: 'bg-[#EEF6EE]' },
 }
 
-/**
- * Reads moodAnswers from sessionStorage (written by mood/page.tsx) and maps
- * them to a concise NPC tone instruction injected into the dialogue system prompt.
- */
-function buildMoodModifier(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = sessionStorage.getItem('moodAnswers')
-    if (!raw) return null
-    const answers: Record<string, string> = JSON.parse(raw)
-
-    const parts: string[] = ['Adjust your tone based on the learner\'s current state:']
-
-    const moodMap: Record<string, string> = {
-      'Happy':   'The learner is happy and upbeat — match their energy with warmth and enthusiasm.',
-      'Okay':    'The learner is in a neutral mood — keep your tone steady and supportive.',
-      'Tired':   'The learner is feeling tired — be extra patient, keep responses brief and low-pressure.',
-      'Nervous': 'The learner is feeling nervous — be especially gentle, reassuring, and encouraging.',
-    }
-    if (answers.mood && moodMap[answers.mood]) parts.push(moodMap[answers.mood])
-
-    const energyMap: Record<string, string> = {
-      'I want to try everything, even if I fail!':              'They are eager to experiment — encourage all attempts even if imperfect.',
-      "I'd prefer to get it right the first time; let's go slow.": 'They prefer a careful, slow pace — do not rush them.',
-      'Mistakes are just obstacles to smash through!':          'They have a bold, resilient attitude — keep the energy high.',
-    }
-    if (answers.energy && energyMap[answers.energy]) parts.push(energyMap[answers.energy])
-
-    const volumeMap: Record<string, string> = {
-      "I'm ready to shout the answers!":          'They are highly engaged and participative today.',
-      "I'd rather just observe and type quietly.": 'They prefer a quieter pace — give them extra time to respond.',
-      "I'm here for a deep, serious discussion.":  'They are in a focused, serious mood — match that gravitas.',
-    }
-    if (answers.volume && volumeMap[answers.volume]) parts.push(volumeMap[answers.volume])
-
-    const vibeMap: Record<string, string> = {
-      'Exploring and playing around.':      'They want a playful, exploratory session — keep it light and fun.',
-      'Deep focus and mastery.':            'They want focused, meaningful practice — be precise and purposeful.',
-      'Just getting through it comfortably': 'They want a comfortable, low-stress session — be warm and easy-going.',
-    }
-    if (answers.vibe && vibeMap[answers.vibe]) parts.push(vibeMap[answers.vibe])
-
-    return parts.length > 1 ? parts.join(' ') : null
-  } catch {
-    return null
-  }
+interface SessionRecord {
+  id: string
+  scenario_id: string
+  mode: string
+  status: string
+  duration_seconds: number | null
+  hearts_remaining: number | null
+  started_at: string
 }
 
-export default function PracticePage() {
-  const router = useRouter()
+interface ScenarioStats {
+  total: number
+  learning: number
+  survival: number
+  bestHearts: number | null
+  lastPlayed: string | null
+  /** 0-100 rough completion score */
+  pct: number
+}
 
-  // Auth
+function computeStats(sessions: SessionRecord[], scenarioId: string): ScenarioStats {
+  const mine = sessions.filter((s) => s.scenario_id === scenarioId && s.status === 'completed')
+  if (mine.length === 0) return { total: 0, learning: 0, survival: 0, bestHearts: null, lastPlayed: null, pct: 0 }
+
+  const learning  = mine.filter((s) => s.mode === 'learning').length
+  const survival  = mine.filter((s) => s.mode === 'survival').length
+  const hearts    = mine.filter((s) => s.mode === 'survival' && s.hearts_remaining !== null)
+  const bestHearts = hearts.length ? Math.max(...hearts.map((s) => s.hearts_remaining!)) : null
+  const sorted = [...mine].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+  const lastPlayed = sorted[0]?.started_at ?? null
+  // rough pct: cap at 100, each session adds ~20%
+  const pct = Math.min(100, mine.length * 20)
+  return { total: mine.length, learning, survival, bestHearts, lastPlayed, pct }
+}
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7)  return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
+}
+
+export default function PracticeHubPage() {
+  const router   = useRouter()
+
   const [authChecked, setAuthChecked] = useState(false)
-  const [authToken, setAuthToken] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [persona, setPersona] = useState<string>('guided_learner')
-
-  // Session
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [mode] = useState<'learning' | 'survival'>('learning')
-  const [moodModifier] = useState<string | null>(() => buildMoodModifier())
-
-  // Gameplay state
-  const [selectedIcons, setSelectedIcons] = useState<AACIcon[]>([])
-  const [npcResponse, setNpcResponse] = useState<string | null>(scenario.npcGreeting)
-  const [npcEmotion, setNpcEmotion] = useState<string | undefined>(undefined)
-  const [npcLoading, setNpcLoading] = useState(false)
-  const [history, setHistory] = useState<Message[]>([])
-  const [hearts, setHearts] = useState(MAX_HEARTS)
-  const [sessionOver, setSessionOver] = useState(false)
-
-  // Webcam / recording
-  const [webcamActive, setWebcamActive] = useState(false)
-  const sessionStartTimeRef = useRef<number>(0)
-
-  // Metrics for persona classification + behavioral tracking
-  const messageStartTimeRef = useRef<number | null>(null)
-  const latencySamplesRef = useRef<number[]>([])
-  const iconCountSamplesRef = useRef<number[]>([])
-  const turnIndexRef = useRef<number>(0)
-  const repromptCountRef = useRef<number>(0)
-  const lastNpcEmotionRef = useRef<string | undefined>(undefined)
-
-  // Survival timeout
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const { videoRef, canvasRef, captureFrameRef, startWebcam, stopWebcam, captureFrame, startRecording, stopRecording } =
-    useWebcam()
-
-  const { currentEmotion, getEmotionLog, resetEmotionLog } = useEmotionCapture({
-    sessionId,
-    token: authToken,
-    sessionStartTime: sessionStartTimeRef.current,
-    captureFrame,
-    enabled: !sessionOver && webcamActive,
-  })
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  const [authToken, setAuthToken]     = useState<string | null>(null)
+  const [userName, setUserName]       = useState('Learner')
+  const [sessions, setSessions]       = useState<SessionRecord[]>([])
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        router.push('/')
-        return
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { router.push('/'); return }
+      const email = session.user.email ?? ''
+      const name  = email.split('@')[0]
+      setUserName(name.charAt(0).toUpperCase() + name.slice(1))
       setAuthToken(session.access_token)
-      setUserId(session.user.id)
-
-      const { data } = await supabase
-        .from('learner_profiles')
-        .select('persona')
-        .eq('user_id', session.user.id)
-        .single()
-      if (data?.persona) setPersona(data.persona)
-
       setAuthChecked(true)
     })
   }, [router])
 
-  // ── Session start ─────────────────────────────────────────────────────────
-
   useEffect(() => {
-    if (!authChecked || !authToken) return
+    if (!authToken) return
+    fetch(`${SESSION_URL}/sessions`, { headers: { Authorization: `Bearer ${authToken}` } })
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setSessions(data) })
+      .catch(() => {})
+  }, [authToken])
 
-    async function init() {
-      try {
-        const id = await startSession(authToken!, scenario.id, mode, persona)
-        setSessionId(id)
-      } catch {
-        // Continue without session logging if service unavailable
-      }
-
-      sessionStartTimeRef.current = Date.now()
-      messageStartTimeRef.current = Date.now()
-      const camOk = await startWebcam()
-      if (camOk) {
-        startRecording()
-        setWebcamActive(true)
-      }
-
-      if (mode === 'survival') startSurvivalTimer()
+  function startSession(scenarioId: string, mode: 'learning' | 'survival') {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('selectedScenario', scenarioId)
+      sessionStorage.setItem('selectedMode', mode)
     }
-
-    init()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authChecked])
-
-  // ── Survival timer ────────────────────────────────────────────────────────
-
-  const deductHeart = useCallback(async (reason: 'timeout' | 'off_context') => {
-    setHearts((prev) => {
-      const next = prev - 1
-      if (next <= 0) endSessionFlow(0)
-      // Push updated hearts to Redis (fire-and-forget)
-      if (sessionId && authToken) updateSessionState(authToken, sessionId, { hearts: next })
-      return next
-    })
-    if (sessionId && authToken) {
-      await logEvent(authToken, sessionId, 'heart_lost', { reason })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, authToken])
-
-  function startSurvivalTimer() {
-    clearSurvivalTimer()
-    timeoutRef.current = setTimeout(() => deductHeart('timeout'), SURVIVAL_TIMEOUT_MS)
+    router.push('/learner/session')
   }
-
-  function clearSurvivalTimer() {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-  }
-
-  useEffect(() => () => clearSurvivalTimer(), [])
-
-  // ── Session end ───────────────────────────────────────────────────────────
-
-  async function endSessionFlow(finalHearts: number) {
-    clearSurvivalTimer()
-    setSessionOver(true)
-
-    stopWebcam()
-    setWebcamActive(false)
-
-    if (sessionId && authToken) {
-      stopRecording().then(async (blob) => {
-        if (blob) await uploadSessionVideo(authToken!, sessionId!, blob)
-      }).catch(() => {})
-
-      await endSession(authToken, sessionId, finalHearts)
-    }
-
-    // Post-session persona classification
-    if (userId && latencySamplesRef.current.length > 0) {
-      const avg_latency =
-        latencySamplesRef.current.reduce((a, b) => a + b, 0) / latencySamplesRef.current.length
-      const avg_icons =
-        iconCountSamplesRef.current.length > 0
-          ? iconCountSamplesRef.current.reduce((a, b) => a + b, 0) / iconCountSamplesRef.current.length
-          : 2
-
-      try {
-        const personaRes = await fetch(
-          (process.env.NEXT_PUBLIC_PERSONA_URL || 'http://localhost:8002') + '/classify',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              avg_response_latency_ms: avg_latency,
-              re_prompt_count: repromptCountRef.current,
-              avg_icons_per_message: avg_icons,
-            }),
-          }
-        )
-        if (personaRes.ok) {
-          const { persona: newPersona } = await personaRes.json()
-          setPersona(newPersona)
-          await fetch(
-            (process.env.NEXT_PUBLIC_PERSONA_URL || 'http://localhost:8002') + `/profile/${userId}`,
-            {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ persona: newPersona, avg_response_latency_ms: avg_latency }),
-            }
-          )
-        }
-      } catch {}
-    }
-  }
-
-  // ── Icon selection ────────────────────────────────────────────────────────
-
-  function handleIconSelect(icon: AACIcon) {
-    setSelectedIcons((prev) => [...prev, icon])
-  }
-
-  function handleRemoveIcon(index: number) {
-    setSelectedIcons((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  function handleClear() {
-    setSelectedIcons([])
-  }
-
-  // ── Submit ────────────────────────────────────────────────────────────────
-
-  async function handleSubmit() {
-    if (selectedIcons.length === 0 || npcLoading || sessionOver) return
-
-    clearSurvivalTimer()
-
-    const iconsUsed = [...selectedIcons]
-    iconCountSamplesRef.current.push(iconsUsed.length)
-
-    const responseLatencyMs = messageStartTimeRef.current !== null
-      ? Date.now() - messageStartTimeRef.current
-      : null
-    if (responseLatencyMs !== null) {
-      latencySamplesRef.current.push(responseLatencyMs)
-    }
-
-    // A repair attempt is when the learner re-responds after the NPC was confused
-    const isRepair = lastNpcEmotionRef.current === 'confused'
-    if (isRepair) repromptCountRef.current += 1
-
-    const message = await translateIcons(iconsUsed.map((i) => i.label))
-
-    setSelectedIcons([])
-    setNpcLoading(true)
-    setNpcResponse(null)
-
-    if (sessionId && authToken) {
-      logEvent(authToken, sessionId, 'icon_selection', {
-        icons: iconsUsed.map((i) => i.label),
-        translated: message,
-        turn_index: turnIndexRef.current,
-        response_latency_ms: responseLatencyMs,
-        icon_count: iconsUsed.length,
-        is_repair: isRepair,
-      })
-    }
-
-    try {
-      if (mode === 'survival' && history.length > 0) {
-        const lastNpc = history.findLast((m) => m.role === 'assistant')?.content ?? ''
-        const offContext = await judgeResponse(scenario.id, lastNpc, message)
-        if (offContext) {
-          await deductHeart('off_context')
-          if (hearts - 1 <= 0) {
-            setNpcLoading(false)
-            return
-          }
-        }
-      }
-
-      // Get and summarize emotions since last response
-      const emotionLog = getEmotionLog()
-      const emotionSummary = await summarizeEmotionLog(emotionLog)
-
-      const result = await sendDialogue(message, history, {
-        scenario_id: scenario.id,
-        mode,
-        persona,
-        mood_modifier: moodModifier ?? undefined,
-        emotion: emotionSummary ? {
-          summary_emotion: emotionSummary.summary_emotion,
-          explanation: emotionSummary.explanation,
-          avg_score: emotionSummary.avg_score,
-        } : undefined,
-      })
-
-      // Reset emotion log for next response cycle
-      resetEmotionLog()
-
-      const newHistory: Message[] = [
-        ...history,
-        { role: 'user', content: message },
-        { role: 'assistant', content: result.response },
-      ]
-      setHistory(newHistory)
-      setNpcResponse(result.response)
-      setNpcEmotion(result.npc_emotion)
-      lastNpcEmotionRef.current = result.npc_emotion
-      turnIndexRef.current += 1
-      messageStartTimeRef.current = Date.now()
-      // Push updated turn index to Redis (fire-and-forget)
-      if (sessionId && authToken) {
-        updateSessionState(authToken, sessionId, { turn_index: turnIndexRef.current })
-      }
-
-      if (result.audio_base64) playAudio(result.audio_base64)
-
-      if (sessionId && authToken) {
-        logEvent(authToken, sessionId, 'npc_response', { content: result.response })
-      }
-
-      if (mode === 'survival' && hearts > 0) startSurvivalTimer()
-    } catch (err) {
-      console.error('Dialogue error:', err)
-      setNpcResponse("Sorry, I didn't catch that. Could you try again?")
-      if (mode === 'survival') startSurvivalTimer()
-    } finally {
-      setNpcLoading(false)
-    }
-  }
-
-  // ── Sign out ──────────────────────────────────────────────────────────────
 
   async function handleSignOut() {
-    clearSurvivalTimer()
-    if (sessionId && authToken && !sessionOver) await endSession(authToken, sessionId, hearts)
     await supabase.auth.signOut()
     router.push('/')
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-white text-xl">Loading…</div>
-      </div>
-    )
-  }
-
-  if (sessionOver) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 gap-6 px-6">
-        <div className="text-center">
-          <div className="text-5xl mb-4">{hearts > 0 ? '🎉' : '💔'}</div>
-          <h2 className="text-white text-2xl font-bold mb-2">
-            {hearts > 0 ? 'Session Complete!' : 'No hearts left!'}
-          </h2>
-          <p className="text-gray-400 text-sm">
-            {hearts > 0
-              ? `Great job! You completed the ${scenario.title} scenario.`
-              : 'Better luck next time! Keep practising.'}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => router.push('/learner/home')}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium transition-colors"
-          >
-            Back to Home
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-[#E8714A] text-xl font-bold">Loading…</div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen w-screen bg-gray-100 flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/learner/home')}
-            className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            <span className="text-sm font-medium">Home</span>
-          </button>
-          <div className="w-px h-5 bg-gray-200" />
-          <div>
-            <h1 className="text-gray-900 font-semibold text-sm">{scenario.title}</h1>
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${mode === 'learning' ? 'bg-green-400' : 'bg-rose-400'}`} />
-              <p className={`text-xs font-medium ${mode === 'learning' ? 'text-green-500' : 'text-rose-500'}`}>
-                {mode === 'learning' ? 'Learning Mode' : 'Survival Mode'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {mode === 'survival' && <HeartsBar hearts={hearts} />}
-          <button
-            onClick={() => endSessionFlow(hearts)}
-            className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition-colors font-medium"
-          >
-            End Session
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="text-gray-500 hover:text-gray-900 text-sm transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="flex-1 flex gap-3 p-3 overflow-hidden">
-        {/* Left: Scenario Stage + Hint Bar */}
-        <div className="w-[45%] flex-shrink-0 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 relative">
-            <ScenarioStage
-              npcResponse={npcResponse}
-              npcLoading={npcLoading}
-              backgroundSrc={scenario.background}
-              npcSrc={scenario.npc}
-              npcEmotion={npcEmotion}
-            />
-            {/* Webcam overlay — top-right corner of scenario panel */}
-            <div className="absolute top-2 right-2 z-10">
-              <WebcamOverlay
-                videoRef={videoRef}
-                canvasRef={canvasRef}
-                currentEmotion={currentEmotion}
-                webcamActive={webcamActive}
-              />
-            </div>
-          </div>
-          {mode === 'learning' && (
-            <SabiHintBar
-              scenarioId={scenario.id}
-              npcLastMessage={npcResponse}
-              visible={!npcLoading && !!npcResponse}
-              availableIcons={allAvailableIconLabels}
-            />
-          )}
-        </div>
-
-        {/* Right: AAC Board + Message Bar */}
-        <div className="flex-1 flex flex-col gap-3 min-h-0">
-          <div className="flex-1 min-h-0">
-            <AACBoard
-              onIconSelect={handleIconSelect}
-              selectedIds={selectedIcons.map((i) => i.id)}
-              scenarioIcons={scenario.scenarioIcons}
-            />
-          </div>
-          <div className="flex-shrink-0">
-            <MessageBar
-              selectedIcons={selectedIcons}
-              onRemove={handleRemoveIcon}
-              onClear={handleClear}
-              onSubmit={handleSubmit}
-              loading={npcLoading}
-            />
-          </div>
-        </div>
+    <div className="min-h-screen bg-white flex flex-col">
+      <div className="px-5 md:px-8 pt-8">
+        <h1 className="text-2xl font-extrabold text-gray-900">Hi, {userName}!</h1>
+        <p className="text-gray-400 text-sm mt-1">Choose a scenario and mode.</p>
       </div>
 
-      {/* Hidden canvas for JPEG frame capture */}
-      <canvas ref={captureFrameRef} className="hidden" aria-hidden="true" />
+      <main className="flex-1 overflow-y-auto pb-28 px-5 md:px-8 space-y-6 pt-4">
+
+          {/* Mode legend cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-white rounded-3xl p-4 shadow-sm flex items-center gap-3">
+              <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">📚</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-gray-900 font-bold text-sm">Learning Mode</p>
+                <p className="text-gray-400 text-xs mt-0.5">Hints available · No timer · Low pressure</p>
+              </div>
+              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-green-600 text-xs font-bold">✓</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl p-4 shadow-sm flex items-center gap-3">
+              <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">⚔️</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-gray-900 font-bold text-sm">Survival Mode</p>
+                <p className="text-gray-400 text-xs mt-0.5">5 lives · 30s timer · No hints</p>
+              </div>
+              <div className="flex gap-0.5">
+                {[1,2,3,4,5].map(i => <span key={i} className="text-xs">❤️</span>)}
+              </div>
+            </div>
+          </div>
+
+          {/* Scenario cards with progress */}
+          <div>
+            <h2 className="text-gray-900 text-xl font-extrabold mb-3">Choose a Scenario</h2>
+            <div className="space-y-3">
+              {SCENARIO_LIST.filter((s) => SCENE_META[s.id]).map((scenario) => {
+                const meta  = SCENE_META[scenario.id]!
+                const stats = computeStats(sessions, scenario.id)
+
+                return (
+                  <div key={scenario.id} className="bg-white rounded-3xl shadow-sm overflow-hidden">
+                    {/* Scenario header with progress */}
+                    <div className={`${meta.bg} px-5 pt-4 pb-3`}>
+                      <div className="flex items-center gap-4 mb-3">
+                        <span className="text-4xl">{meta.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-gray-900 font-extrabold text-base">{scenario.title}</p>
+                          <p className="text-gray-500 text-xs mt-0.5">{scenario.description}</p>
+                        </div>
+                        {/* Session count badge */}
+                        {stats.total > 0 && (
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-gray-900 font-extrabold text-base">{stats.total}</p>
+                            <p className="text-gray-400 text-[10px]">session{stats.total !== 1 ? 's' : ''}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Progress bar */}
+                      {stats.total > 0 ? (
+                        <div>
+                          <div className="flex justify-between text-[10px] text-gray-400 font-semibold mb-1">
+                            <span className="flex gap-2">
+                              {stats.learning > 0 && <span>📚 {stats.learning} learning</span>}
+                              {stats.survival > 0 && <span>⚔️ {stats.survival} survival</span>}
+                            </span>
+                            {stats.lastPlayed && <span>Last: {formatRelative(stats.lastPlayed)}</span>}
+                          </div>
+                          <div className="h-2 bg-white/60 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-[#E8714A] rounded-full transition-all duration-700"
+                              style={{ width: `${stats.pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-400 text-xs">No sessions yet — start below!</p>
+                      )}
+                    </div>
+
+                    {/* Mode buttons */}
+                    <div className="flex gap-3 px-5 py-4">
+                      <button
+                        onClick={() => startSession(scenario.id, 'learning')}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-50 hover:bg-green-100 border-2 border-green-200 hover:border-green-400 text-green-700 font-bold text-sm transition-all active:scale-95"
+                      >
+                        <span>📚</span>
+                        Learning
+                      </button>
+                      <button
+                        onClick={() => startSession(scenario.id, 'survival')}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-200 hover:border-rose-400 text-rose-600 font-bold text-sm transition-all active:scale-95"
+                      >
+                        <span>⚔️</span>
+                        Survival
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Coming soon */}
+              <div className="bg-white rounded-3xl shadow-sm overflow-hidden opacity-50">
+                <div className="bg-[#F5EEFF] px-5 py-4 flex items-center gap-4">
+                  <span className="text-4xl">🎪</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-gray-900 font-extrabold text-base">Playground</p>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-gray-400 text-white rounded-full">SOON</span>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-0.5">Play with friends</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 px-5 py-4">
+                  <div className="flex-1 py-3 rounded-2xl bg-gray-50 border-2 border-gray-200 text-center text-gray-400 font-bold text-sm cursor-not-allowed">📚 Learning</div>
+                  <div className="flex-1 py-3 rounded-2xl bg-gray-50 border-2 border-gray-200 text-center text-gray-400 font-bold text-sm cursor-not-allowed">⚔️ Survival</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+      </main>
+
+      <LearnerBottomNav />
     </div>
   )
 }

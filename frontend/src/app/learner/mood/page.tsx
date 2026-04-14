@@ -68,7 +68,7 @@ export default function MoodCheckPage() {
       setAnswers(newAnswers)
       if (isLast) {
         sessionStorage.setItem('moodAnswers', JSON.stringify(newAnswers))
-        router.push('/learner/practice')
+        router.push('/learner/session')
       } else {
         setStep((s) => s + 1)
         setSelected(null)

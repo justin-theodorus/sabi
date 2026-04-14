@@ -52,6 +52,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  font-size: 17px;
   background: var(--color-bg);
   color: var(--color-text);
   /* SF Rounded on Apple; Nunito as the closest web-safe rounded fallback */

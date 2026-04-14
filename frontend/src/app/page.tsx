@@ -50,7 +50,7 @@ export default function AuthPage() {
   return (
     <div className="sabi-page items-center justify-center">
       <div className="sabi-centered">
-        <Image src={logo} alt="SABI" height={68} priority className="mb-3" />
+        <Image src={logo} alt="SABI" height={240} priority className="mb-3" />
         <p
           className="text-sm mb-10 text-center"
           style={{ color: "var(--color-text-secondary)" }}
