@@ -3,6 +3,12 @@ export interface ScenarioIcon {
   label: string
 }
 
+export interface ScenarioEvent {
+  id: string
+  npcLine: string   // what the NPC says when the event fires (shown in IntruderBubble)
+  context: string   // brief context string passed to dialogue engine as active_event
+}
+
 export interface ScenarioConfig {
   id: string
   dbId: string          // UUID from Supabase scenarios table
@@ -13,6 +19,12 @@ export interface ScenarioConfig {
   npcName: string
   npcGreeting: string
   scenarioIcons: ScenarioIcon[]
+  events: ScenarioEvent[]
+  // Custom scenario fields (set when scenario originates from DB)
+  baseScenario?: string   // one of: hawker_centre | group_project | queue_shop
+  npcPersonality?: string // Friendly | Impatient | Confused
+  supportLevel?: string   // High | Moderate | Low | Independent
+  hintLevel?: string      // No hints | Gentle nudge | Full guidance
 }
 
 // These dbIds match what was seeded in the Supabase scenarios table
@@ -45,6 +57,18 @@ export const SCENARIOS: Record<string, ScenarioConfig> = {
       { id: 'how-much', label: 'how much' },
       { id: 'takeaway', label: 'takeaway' },
     ],
+    events: [
+      {
+        id: 'queue_cutter',
+        npcLine: '*Another customer pushes in and shouts their order!*',
+        context: 'A rude customer just jumped the queue and is trying to order ahead of the learner. The uncle looks flustered. The learner may want to speak up or wait.',
+      },
+      {
+        id: 'ingredient_shortage',
+        npcLine: 'Aiyah, sorry ah — today no more chicken already!',
+        context: 'The uncle just announced they have run out of chicken. The learner needs to choose an alternative dish.',
+      },
+    ],
   },
   group_project: {
     id: 'group_project',
@@ -71,6 +95,18 @@ export const SCENARIOS: Record<string, ScenarioConfig> = {
       { id: 'leader', label: 'leader' },
       { id: 'team', label: 'team' },
     ],
+    events: [
+      {
+        id: 'teacher_drops_by',
+        npcLine: '*Teacher walks over and asks how the project is going!*',
+        context: 'The teacher has just approached the group and is asking for a quick progress update. The learner may want to summarise what they have done.',
+      },
+      {
+        id: 'presentation_deadline',
+        npcLine: 'Oh no — the teacher moved our presentation to tomorrow!',
+        context: 'The classmate just found out the presentation deadline has been brought forward to tomorrow. The group needs to decide what to prioritise.',
+      },
+    ],
   },
   queue_shop: {
     id: 'queue_shop',
@@ -93,6 +129,18 @@ export const SCENARIOS: Record<string, ScenarioConfig> = {
       { id: 'excuse-me', label: 'excuse me' },
       { id: 'my-turn', label: 'my turn' },
       { id: 'help', label: 'help' },
+    ],
+    events: [
+      {
+        id: 'security_arrives',
+        npcLine: '*A security guard walks over and is watching!*',
+        context: 'A mall security guard has appeared nearby and is observing the situation. The queue cutter looks nervous. The learner may use this as leverage or de-escalate.',
+      },
+      {
+        id: 'bystander_helps',
+        npcLine: '*Someone behind you says "Eh, he cut queue lah!"*',
+        context: 'A bystander in the queue is backing the learner up by calling out the queue cutter. The learner can use this support to speak up more confidently.',
+      },
     ],
   },
   home_family: {
@@ -118,6 +166,18 @@ export const SCENARIOS: Record<string, ScenarioConfig> = {
       { id: 'more', label: 'more' },
       { id: 'enough', label: 'enough' },
     ],
+    events: [
+      {
+        id: 'phone_rings',
+        npcLine: '*Family member gets a phone call and steps away briefly!*',
+        context: 'The family member just received a phone call and has briefly stepped away. The learner has a moment alone before they return — and may need to repeat their request.',
+      },
+      {
+        id: 'unexpected_guest',
+        npcLine: 'Wah, your cousin coming over later also — cook extra or not?',
+        context: 'A cousin is unexpectedly coming over for lunch. The family member is asking whether to cook more food. The learner needs to weigh in on the decision.',
+      },
+    ],
   },
 }
 
@@ -137,34 +197,59 @@ interface DBScenarioRow {
   npc_path: string | null
   npc_background_url: string | null
   scenario_icons: Array<{ id: string; label: string }> | null
+  base_scenario: string
+  npc_personality: string | null
+  support_level: string | null
+  hint_level: string | null
 }
 
 /**
  * Fetches active custom scenarios from Supabase and merges with hardcoded SCENARIOS.
- * DB rows with the same slug as a hardcoded scenario override the hardcoded entry.
+ * Custom scenarios inherit assets and events from their base_scenario, overriding
+ * only the fields explicitly set by the therapist.
+ * Base scenarios themselves are not overridden by DB rows — hardcoded entries win
+ * for the 3 built-in slugs (hawker_centre, group_project, queue_shop).
  */
 export async function fetchScenariosFromDB(): Promise<Record<string, ScenarioConfig>> {
   const { data, error } = await supabase
     .from('scenarios')
-    .select('id, name, slug, description, npc_name, npc_greeting, npc_path, npc_background_url, scenario_icons')
+    .select('id, name, slug, description, npc_name, npc_greeting, npc_path, npc_background_url, scenario_icons, base_scenario, npc_personality, support_level, hint_level')
     .eq('is_active', true)
 
   if (error || !data) return SCENARIOS
 
   const merged: Record<string, ScenarioConfig> = { ...SCENARIOS }
+  const BASE_IDS = new Set(Object.keys(SCENARIOS))
 
   for (const row of data as DBScenarioRow[]) {
     const key = row.slug ?? row.id
+    // Never overwrite a hardcoded base scenario
+    if (BASE_IDS.has(key)) continue
+
+    const base = SCENARIOS[row.base_scenario] ?? SCENARIOS.hawker_centre
+
     merged[key] = {
       id: key,
       dbId: row.id,
       title: row.name,
-      description: row.description ?? '',
-      background: row.npc_background_url ?? '/backgrounds/hawker-centre.jpg',
-      npc: row.npc_path ?? '/npc/hawker-uncle.png',
-      npcName: row.npc_name ?? 'NPC',
-      npcGreeting: row.npc_greeting ?? 'Hello! How can I help you?',
-      scenarioIcons: row.scenario_icons ?? [],
+      description: row.description ?? base.description,
+      // Inherit background + NPC from base unless therapist set a real image path
+      // (npc_path is overloaded in session-service to also store unpredictableEvents,
+      //  so we only trust it if it looks like an actual path starting with '/')
+      background: row.npc_background_url?.trim() || base.background,
+      npc: (row.npc_path?.startsWith('/') ? row.npc_path : null) || base.npc,
+      npcName: row.npc_name?.trim() || base.npcName,
+      npcGreeting: row.npc_greeting?.trim() || base.npcGreeting,
+      // Merge: scenario-specific icons from DB first, then fill with base icons
+      scenarioIcons: (row.scenario_icons && row.scenario_icons.length > 0)
+        ? row.scenario_icons
+        : base.scenarioIcons,
+      // Always inherit events from base scenario
+      events: base.events,
+      baseScenario: row.base_scenario,
+      npcPersonality: row.npc_personality ?? undefined,
+      supportLevel: row.support_level ?? undefined,
+      hintLevel: row.hint_level ?? undefined,
     }
   }
 

@@ -1,26 +1,34 @@
 """
 SABI Stress Test Suite
 ======================
-Run with:
+Run via Kong (full stack):
     locust -f tests/locust/locustfile.py --host http://localhost:8000
+
+Run dialogue engine independently (bypasses Kong + queue):
+    locust -f tests/locust/locustfile.py --host http://localhost:8001
+
+Run a single user class (headless):
+    locust -f tests/locust/locustfile.py --host http://localhost:8000 \\
+           --headless -u 20 -r 2 --run-time 3m --class-picker
+    # or pass the class name as positional arg:
+    locust -f tests/locust/locustfile.py --host http://localhost:8000 \\
+           --headless -u 20 -r 2 --run-time 3m DialogueStreamStressUser
 
 Scenarios
 ---------
-ExpressionStressUser  — floods /analyze-frame to trigger HPA on expression-service
-                        Goal: show 1 pod saturates at ~15 concurrent users,
-                        HPA scales to 3 pods at 40+ concurrent users
+ExpressionStressUser        — floods /analyze-frame to trigger HPA on expression-service
+                              Goal: show 1 pod saturates at ~15 concurrent users
 
-DialogueStressUser    — hammers /dialogue to validate Kong rate limiting (30 req/min)
-                        Goal: show 429s appear cleanly at the rate limit boundary
+DialogueStreamStressUser    — hits /dialogue/stream (SSE) through BullMQ queue
+                              Goal: validate queue backpressure + rate limiting (45 req/min)
+                              Use --host http://localhost:8000 (Kong → queue-api → engine)
 
-FullSessionUser       — realistic end-to-end session flow
-                        (start → 10 turns with emotion frames → end)
-                        Goal: measure p50/p95 latency under real load
+DialogueDirectStressUser    — hits /dialogue/stream directly on dialogue-engine (no queue)
+                              Goal: isolate dialogue-engine performance without queue overhead
+                              Use --host http://localhost:8001 (requires port exposed in docker-compose)
 
-Recommended run sequence for judge demo:
-  1. ExpressionStressUser only, ramp 1→80 users over 2 minutes → capture HPA graph
-  2. DialogueStressUser only, ramp 1→60 users → capture 429 rate limit graph
-  3. FullSessionUser, 20 concurrent → capture realistic p95 latency
+FullSessionUser             — realistic end-to-end session flow (start → 10 turns → end)
+                              Goal: measure p50/p95 latency under combined load
 """
 
 import io
@@ -35,15 +43,6 @@ from locust import HttpUser, TaskSet, between, events, task
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _make_jpeg(width: int = 48, height: int = 48) -> bytes:
-    """
-    Generate a minimal valid JPEG (solid colour) without external dependencies.
-    Uses a raw RGB bitmap wrapped in the smallest possible JFIF structure.
-    In practice, DeepFace will find no face and return 'neutral' — that's fine
-    for a stress test; we're measuring throughput, not accuracy.
-    """
-    # Build a tiny PNG instead (simpler to construct programmatically)
-    # and send as multipart/form-data — expression-service accepts any image
-    # that cv2.imdecode can read.
     def png_chunk(chunk_type: bytes, data: bytes) -> bytes:
         length = struct.pack('>I', len(data))
         crc = struct.pack('>I', zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
@@ -56,14 +55,12 @@ def _make_jpeg(width: int = 48, height: int = 48) -> bytes:
         row = bytes([0]) + bytes([r, g, b] * width)
         raw_rows += row
     compressed = zlib.compress(raw_rows)
-
-    png = (
+    return (
         b'\x89PNG\r\n\x1a\n'
         + png_chunk(b'IHDR', ihdr)
         + png_chunk(b'IDAT', compressed)
         + png_chunk(b'IEND', b'')
     )
-    return png
 
 
 _DUMMY_FRAME = _make_jpeg()
@@ -83,6 +80,34 @@ _DIALOGUE_MESSAGES = [
 
 _SCENARIO_IDS = ["hawker_centre", "queue_shop", "group_project", "home_family"]
 
+
+def _consume_sse(resp) -> dict:
+    """
+    Drain an SSE stream and return the payload from the final 'done' event.
+    Returns {} if the stream ends without a done event or on error.
+    """
+    result = {}
+    buffer = ''
+    event_type = ''
+    for chunk in resp.iter_content(chunk_size=None):
+        buffer += chunk.decode('utf-8', errors='replace')
+        lines = buffer.split('\n')
+        buffer = lines.pop()
+        for line in lines:
+            if line.startswith('event: '):
+                event_type = line[7:].strip()
+            elif line.startswith('data: '):
+                if event_type == 'done':
+                    try:
+                        result = json.loads(line[6:])
+                    except json.JSONDecodeError:
+                        pass
+                elif event_type == 'error':
+                    result = {'error': line[6:]}
+                event_type = ''
+    return result
+
+
 # ── Task Sets ─────────────────────────────────────────────────────────────────
 
 class ExpressionTasks(TaskSet):
@@ -91,7 +116,7 @@ class ExpressionTasks(TaskSet):
     One request per second per user mimics real usage (emotion capture interval).
     At 15 concurrent users → 1 pod hits ~70% CPU → HPA fires.
     """
-    wait_time = between(0.8, 1.2)   # Mimic 1s capture interval
+    wait_time = between(0.8, 1.2)
 
     @task
     def analyze_frame(self):
@@ -109,93 +134,129 @@ class ExpressionTasks(TaskSet):
                 resp.failure(f"Unexpected {resp.status_code}: {resp.text[:80]}")
 
 
-class DialogueTasks(TaskSet):
+class DialogueStreamTasks(TaskSet):
     """
-    Hammers /dialogue to validate Kong rate limiting.
-    Each user sends one dialogue request every 1–3 seconds.
-    Kong allows 30 req/min per IP; at 30+ users sharing an IP 429s appear.
+    Hits /dialogue/stream (SSE) — the real production path through BullMQ queue.
+    Drains the full SSE stream so Locust measures total time including TTS.
+
+    With queue: Kong → dialogue-queue-api → BullMQ → dialogue-queue-worker → dialogue-engine
+    Rate limit: 45 req/min (Redis sliding window across all worker pods)
+    Expected: requests queue cleanly under load; 429s only if Redis limit exceeded
     """
-    wait_time = between(1, 3)
+    wait_time = between(2, 5)
 
     def on_start(self):
         self.history = []
         self.scenario_id = random.choice(_SCENARIO_IDS)
 
     @task
-    def send_dialogue(self):
+    def stream_dialogue(self):
         message = random.choice(_DIALOGUE_MESSAGES)
         payload = {
             "message": message,
-            "history": self.history[-10:],   # Last 10 turns only
+            "history": self.history[-6:],
             "scenario_id": self.scenario_id,
             "mode": "learning",
             "persona": "zippy_sotong",
         }
         with self.client.post(
-            "/dialogue",
+            "/dialogue/stream",
             json=payload,
-            name="/dialogue",
+            name="/dialogue/stream",
+            stream=True,
+            timeout=180,
             catch_response=True,
         ) as resp:
-            if resp.status_code == 200:
-                data = resp.json()
-                # Extend local history
-                self.history.append({"role": "user", "content": message})
-                self.history.append({"role": "assistant", "content": data.get("response", "")})
-                resp.success()
-            elif resp.status_code == 429:
-                # Expected under load — Kong rate limit working correctly
-                resp.failure("Kong rate limit (429) — expected at high concurrency")
-            else:
+            if resp.status_code == 429:
+                resp.failure("Rate limit (429)")
+                return
+            if not resp.ok:
                 resp.failure(f"Unexpected {resp.status_code}: {resp.text[:80]}")
+                return
+
+            done = _consume_sse(resp)
+            if 'error' in done:
+                resp.failure(f"SSE error: {done['error']}")
+            else:
+                npc_reply = done.get('full_text', '')
+                self.history.append({"role": "user", "content": message})
+                self.history.append({"role": "assistant", "content": npc_reply})
+                resp.success()
+
+
+class DialogueDirectTasks(TaskSet):
+    """
+    Hits /dialogue/stream directly on dialogue-engine (port 8001), bypassing
+    Kong and the BullMQ queue entirely. Use to isolate dialogue-engine performance.
+
+    Requires dialogue-engine port to be exposed in docker-compose:
+      ports:
+        - "8001:8001"
+    Run with: --host http://localhost:8001
+    """
+    wait_time = between(2, 5)
+
+    def on_start(self):
+        self.history = []
+        self.scenario_id = random.choice(_SCENARIO_IDS)
+
+    @task
+    def stream_dialogue_direct(self):
+        message = random.choice(_DIALOGUE_MESSAGES)
+        payload = {
+            "message": message,
+            "history": self.history[-6:],
+            "scenario_id": self.scenario_id,
+            "mode": "learning",
+            "persona": "zippy_sotong",
+        }
+        with self.client.post(
+            "/dialogue/stream",
+            json=payload,
+            name="/dialogue/stream [direct]",
+            stream=True,
+            timeout=180,
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 429:
+                resp.failure("Rate limit (429) — asyncio semaphore full")
+                return
+            if not resp.ok:
+                resp.failure(f"Unexpected {resp.status_code}: {resp.text[:80]}")
+                return
+
+            done = _consume_sse(resp)
+            if 'error' in done:
+                resp.failure(f"SSE error: {done['error']}")
+            else:
+                npc_reply = done.get('full_text', '')
+                self.history.append({"role": "user", "content": message})
+                self.history.append({"role": "assistant", "content": npc_reply})
+                resp.success()
 
 
 class FullSessionTasks(TaskSet):
     """
     Realistic end-to-end scenario:
-      1. POST /sessions      — start session
-      2. × 10 turns:
+      1. × 10 turns:
          a. POST /analyze-frame  — emotion capture
          b. POST /translate      — icon translation
-         c. POST /dialogue       — NPC response
-         d. POST /sessions/events — log event
-      3. PUT  /sessions/end  — end session
-
-    Measures realistic p50/p95 latency under combined load.
-    Does NOT require auth — session-service auth is bypassed in stress mode.
+         c. POST /dialogue/stream — NPC response (full SSE)
+      Measures realistic p50/p95 latency under combined load.
     """
-    wait_time = between(2, 5)   # Learner thinking time between turns
-
-    SESSION_URL = "http://localhost:8004"   # Direct — session-service needs auth bypass
+    wait_time = between(2, 5)
 
     def on_start(self):
-        self.session_id = None
         self.history = []
         self.scenario_id = random.choice(_SCENARIO_IDS)
         self.turn = 0
 
     @task
     def run_session_turn(self):
-        if self.turn == 0:
-            self._start_session()
-        elif self.turn >= 10:
-            self._end_session()
+        if self.turn >= 10:
             self.turn = 0
             self.history = []
-        else:
-            self._do_turn()
-
-    def _start_session(self):
-        # Expression frame (warm up service)
-        self.client.post(
-            "/analyze-frame",
-            files={"file": ("frame.png", io.BytesIO(_DUMMY_FRAME), "image/png")},
-            name="/analyze-frame [session-start]",
-        )
-        self.turn = 1
-
-    def _do_turn(self):
-        t_start = time.time()
+            return
 
         # 1. Emotion frame
         self.client.post(
@@ -205,7 +266,7 @@ class FullSessionTasks(TaskSet):
         )
 
         # 2. Translate icons
-        icons = random.sample(_DIALOGUE_MESSAGES, 1)[0].split()[:3]
+        icons = random.choice(_DIALOGUE_MESSAGES).split()[:3]
         translate_resp = self.client.post(
             "/translate",
             json={"icons": icons},
@@ -217,71 +278,76 @@ class FullSessionTasks(TaskSet):
             else " ".join(icons)
         )
 
-        # 3. Dialogue turn
+        # 3. Dialogue turn (SSE)
         with self.client.post(
-            "/dialogue",
+            "/dialogue/stream",
             json={
                 "message": message,
-                "history": self.history[-10:],
+                "history": self.history[-6:],
                 "scenario_id": self.scenario_id,
                 "mode": "learning",
                 "persona": "steady_turtle",
             },
-            name="/dialogue [in-turn]",
+            name="/dialogue/stream [in-turn]",
+            stream=True,
+            timeout=180,
             catch_response=True,
         ) as resp:
-            if resp.status_code == 200:
-                npc_reply = resp.json().get("response", "")
+            if resp.status_code == 429:
+                resp.failure("Rate limited")
+            elif resp.ok:
+                done = _consume_sse(resp)
+                npc_reply = done.get('full_text', '')
                 self.history.append({"role": "user", "content": message})
                 self.history.append({"role": "assistant", "content": npc_reply})
                 resp.success()
-            elif resp.status_code == 429:
-                resp.failure("Rate limited")
             else:
                 resp.failure(f"{resp.status_code}")
 
         self.turn += 1
-
-    def _end_session(self):
-        # Final emotion frame
-        self.client.post(
-            "/analyze-frame",
-            files={"file": ("frame.png", io.BytesIO(_DUMMY_FRAME), "image/png")},
-            name="/analyze-frame [session-end]",
-        )
-        self.session_id = None
 
 
 # ── User Classes ──────────────────────────────────────────────────────────────
 
 class ExpressionStressUser(HttpUser):
     """
-    Use this class alone to stress expression-service and trigger HPA.
-    Target: ramp from 1 → 80 users over 2 minutes.
-    Watch: expression-service CPU in kubectl top pods -n sabi
-    Expected: HPA fires at ~15 users (1 pod → 2), again at ~30 (2 → 3).
+    Stress expression-service to trigger HPA.
+    Ramp: 1 → 80 users over 2 minutes.
+    Watch: kubectl top pods -n sabi -l app=expression-service
+    Expected: HPA fires at ~15 users (1→2 pods), again at ~30 (2→3 pods).
     """
     tasks = [ExpressionTasks]
     wait_time = between(0.8, 1.2)
-    weight = 1
 
 
-class DialogueStressUser(HttpUser):
+class DialogueStreamStressUser(HttpUser):
     """
-    Use this class alone to validate Kong rate limiting on /dialogue.
-    Target: ramp from 1 → 60 users over 90 seconds.
-    Expected: 429s appear cleanly once aggregate req/min exceeds 30 per IP.
+    Stress /dialogue/stream through the BullMQ queue (full production path).
+    Ramp: 1 → 30 users over 2 minutes. --host http://localhost:8000
+    Expected: requests queue cleanly; 429s only above 45 req/min (Redis rate limit).
+    Watch: docker-compose logs dialogue-queue-worker | grep Completed
     """
-    tasks = [DialogueTasks]
-    wait_time = between(1, 3)
-    weight = 1
+    tasks = [DialogueStreamTasks]
+    wait_time = between(2, 5)
+
+
+class DialogueDirectStressUser(HttpUser):
+    """
+    Stress dialogue-engine directly, bypassing Kong and BullMQ queue.
+    Use to isolate engine performance from queue overhead.
+    --host http://localhost:8001  (requires port 8001 exposed in docker-compose)
+    Ramp: 1 → 10 users. Semaphore limits to CLAUDE_CONCURRENCY=3 concurrent calls.
+    Expected: latency climbs as semaphore queues excess requests; 429s on rate limit.
+    """
+    tasks = [DialogueDirectTasks]
+    wait_time = between(2, 5)
 
 
 class FullSessionUser(HttpUser):
     """
-    Realistic mixed load. Use with 10–30 concurrent users.
-    Measures end-to-end p50/p95 for a complete SABI session.
+    Realistic mixed load. Use with 10–20 concurrent users.
+    Measures end-to-end p50/p95 for a complete SABI session turn.
+    --host http://localhost:8000
     """
     tasks = [FullSessionTasks]
     wait_time = between(2, 5)
-    weight = 1

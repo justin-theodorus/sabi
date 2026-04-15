@@ -270,8 +270,8 @@ export default function SessionReportPage() {
 
   // ── Behavioral metrics derived from session_events ───────────────────────
   const iconSelectionEvents = sessionEvents.filter((e) => e.event_type === 'icon_selection')
-  const timeoutEvents = sessionEvents.filter(
-    (e) => e.event_type === 'heart_lost' && (e.payload.reason as string) === 'timeout'
+  const npcInitiatedEvents  = sessionEvents.filter(
+    (e) => e.event_type === 'npc_response' && e.payload.npc_initiated === true
   )
   const latencies = iconSelectionEvents
     .map((e) => e.payload.response_latency_ms as number | null)
@@ -279,9 +279,12 @@ export default function SessionReportPage() {
   const avgLatencyMs = latencies.length > 0
     ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
     : null
+  const promptsNeeded = npcInitiatedEvents.length
   const repairAttempts = iconSelectionEvents.filter((e) => e.payload.is_repair === true).length
-  const promptsNeeded = repairAttempts + timeoutEvents.length
-  const initiatedFirstTurn = iconSelectionEvents.some((e) => (e.payload.turn_index as number) === 0)
+  // Learner "initiated" if they responded at turn 0 without being prompted first
+  const initiatedFirstTurn = iconSelectionEvents.some(
+    (e) => (e.payload.turn_index as number) === 0 && !(e.payload.after_npc_prompt as boolean)
+  )
 
   const radarData = scores
     ? [
@@ -374,6 +377,48 @@ export default function SessionReportPage() {
             </div>
           </div>
 
+          {/* Behavioral Metrics */}
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
+            <h2 className="text-gray-900 font-extrabold text-base mb-4">Behavioral Metrics</h2>
+            <div className="grid grid-cols-2 gap-3">
+
+              {/* Time to respond */}
+              <div className="bg-gray-50 rounded-2xl p-4">
+                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">Avg. Response Time</p>
+                <p className="text-gray-900 text-2xl font-extrabold">
+                  {avgLatencyMs !== null ? `${(avgLatencyMs / 1000).toFixed(1)}s` : '—'}
+                </p>
+                <p className="text-gray-400 text-xs mt-0.5">per turn</p>
+              </div>
+
+              {/* Prompts needed */}
+              <div className="bg-gray-50 rounded-2xl p-4">
+                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">Prompts Needed</p>
+                <p className="text-gray-900 text-2xl font-extrabold">{promptsNeeded}</p>
+                <p className="text-gray-400 text-xs mt-0.5">NPC had to re-prompt</p>
+              </div>
+
+              {/* Initiated communication */}
+              <div className={`rounded-2xl p-4 ${initiatedFirstTurn ? 'bg-green-50' : 'bg-rose-50'}`}>
+                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">Initiated Communication</p>
+                <p className={`text-2xl font-extrabold ${initiatedFirstTurn ? 'text-green-600' : 'text-rose-500'}`}>
+                  {iconSelectionEvents.length === 0 ? '—' : initiatedFirstTurn ? 'Yes' : 'No'}
+                </p>
+                <p className="text-gray-400 text-xs mt-0.5">started without prompting</p>
+              </div>
+
+              {/* Repair attempts */}
+              <div className={`rounded-2xl p-4 ${repairAttempts > 0 ? 'bg-blue-50' : 'bg-gray-50'}`}>
+                <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">Repairs Made</p>
+                <p className={`text-2xl font-extrabold ${repairAttempts > 0 ? 'text-blue-600' : 'text-gray-900'}`}>
+                  {repairAttempts}
+                </p>
+                <p className="text-gray-400 text-xs mt-0.5">responded after confusion</p>
+              </div>
+
+            </div>
+          </div>
+
           {/* Competence Radar */}
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-center justify-between mb-1">
@@ -401,7 +446,7 @@ export default function SessionReportPage() {
                       <div className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                         style={{ background: COMPETENCE_COLORS[dimension] ?? '#E8714A' }} />
                       <span className="text-sm font-semibold text-gray-700 flex-1">{dimension}</span>
-                      <span className="text-sm font-extrabold text-gray-900">{value.toFixed(0)}/10</span>
+                      <span className="text-sm font-extrabold text-gray-900">{value.toFixed(0)}/100</span>
                     </div>
                   ))}
                 </div>

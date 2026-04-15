@@ -6,16 +6,43 @@ _format_version: "3.0"
 # Paths are unique across services so no prefix-stripping is needed.
 
 services:
-  # Dialogue Engine — most expensive endpoint (Claude API per call)
+  # Dialogue Queue — BullMQ-backed SSE proxy for /dialogue endpoints
+  # Handles concurrency limiting globally; workers call dialogue-engine internally
+  - name: dialogue-queue
+    url: http://dialogue-queue-api:8006
+    connect_timeout: 5000
+    read_timeout: 180000  # 180s: SSE streams stay open while job waits in queue + streams
+    write_timeout: 30000
+    routes:
+      - name: dialogue-queue-routes
+        paths:
+          - /dialogue
+        strip_path: false
+        preserve_host: false
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 120         # Max 120 dialogue calls/min per IP (~2/sec; Anthropic rate limit is the real ceiling)
+          policy: local
+          limit_by: ip
+          hide_client_headers: false
+          error_message: "Rate limit exceeded: max 120 dialogue requests per minute."
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: [GET, POST, OPTIONS]
+          headers: [Content-Type, Authorization]
+
+  # Dialogue Engine — internal only (called by dialogue-queue workers)
+  # Non-dialogue endpoints (hint, judge, scoring) still served directly
   - name: dialogue-engine
     url: http://dialogue-engine:8001
     connect_timeout: 5000
-    read_timeout: 30000   # Claude can take up to ~10s; give headroom
-    write_timeout: 10000
+    read_timeout: 120000
+    write_timeout: 30000
     routes:
-      - name: dialogue-routes
+      - name: dialogue-engine-routes
         paths:
-          - /dialogue
           - /hint
           - /judge
           - /score-session
@@ -23,13 +50,6 @@ services:
         strip_path: false
         preserve_host: false
     plugins:
-      - name: rate-limiting
-        config:
-          minute: 30          # Max 30 Claude API calls/min per IP
-          policy: local
-          limit_by: ip
-          hide_client_headers: false
-          error_message: "Rate limit exceeded: max 30 dialogue requests per minute."
       - name: cors
         config:
           origins: ["*"]

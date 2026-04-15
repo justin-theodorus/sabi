@@ -51,6 +51,17 @@ export async function updateSessionState(
   }
 }
 
+export async function keepAlive(token: string, sessionId: string): Promise<void> {
+  try {
+    await fetch(`${SESSION_URL}/sessions/${sessionId}/heartbeat`, {
+      method: 'PUT',
+      headers: await authHeaders(token),
+    })
+  } catch {
+    // Non-critical
+  }
+}
+
 export async function logEvent(
   token: string,
   sessionId: string,

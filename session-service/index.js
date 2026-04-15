@@ -185,7 +185,7 @@ app.get('/scenarios', async (req, res) => {
     }
     const { data, error } = await supabase
       .from('scenarios')
-      .select('id, name, description, slug, mode, npc_personality, support_level, hint_level, created_by, is_active, npc_path')
+      .select('id, name, description, slug, base_scenario, mode, npc_personality, support_level, hint_level, created_by, is_active, npc_path')
       .or(`created_by.is.null,created_by.eq.${user.id}`)
       .order('created_at', { ascending: true })
     if (error) throw error
@@ -205,12 +205,15 @@ app.post('/scenarios', async (req, res) => {
     }
     const { title, description, category, supportLevel, modeAccess, hintLevel, npcPersonality, unpredictableEvents } = req.body
     if (!title) return res.status(400).json({ error: 'title is required' })
+    const CATEGORY_TO_BASE = { Community: 'hawker_centre', School: 'group_project', Home: 'queue_shop' }
+    const base_scenario = CATEGORY_TO_BASE[category] || 'hawker_centre'
     const { data, error } = await supabase
       .from('scenarios')
       .insert({
         name: title,
         description: description || '',
         slug: (category || 'Community').toLowerCase(),
+        base_scenario,
         support_level: supportLevel || 'Moderate',
         mode: Array.isArray(modeAccess) && modeAccess.includes('Survival Mode') ? 'survival' : 'learning',
         hint_level: hintLevel || 'Gentle nudge',
@@ -240,12 +243,15 @@ app.put('/scenarios/:id', async (req, res) => {
     }
     const { id } = req.params
     const { title, description, category, supportLevel, modeAccess, hintLevel, npcPersonality, unpredictableEvents } = req.body
+    const CATEGORY_TO_BASE = { Community: 'hawker_centre', School: 'group_project', Home: 'queue_shop' }
+    const base_scenario = CATEGORY_TO_BASE[category] || 'hawker_centre'
     const { data, error } = await supabase
       .from('scenarios')
       .update({
         name: title,
         description: description || '',
         slug: (category || 'Community').toLowerCase(),
+        base_scenario,
         support_level: supportLevel || 'Moderate',
         mode: Array.isArray(modeAccess) && modeAccess.includes('Survival Mode') ? 'survival' : 'learning',
         hint_level: hintLevel || 'Gentle nudge',
@@ -548,6 +554,19 @@ app.put('/sessions/:id/end', async (req, res) => {
     res.json({ ok: true })
   } catch (err) {
     console.error('PUT /sessions/:id/end error:', err.message)
+    res.status(err.message.includes('token') ? 401 : 500).json({ error: err.message })
+  }
+})
+
+// PUT /sessions/:id/heartbeat — refresh session liveness key (frontend calls every 10s)
+app.put('/sessions/:id/heartbeat', async (req, res) => {
+  try {
+    await verifyToken(req)
+    const { id } = req.params
+    // TTL of 30s: if key expires the session is considered abandoned
+    await rTry(() => redis.setex(`session:${id}:alive`, 30, '1'))
+    res.json({ ok: true })
+  } catch (err) {
     res.status(err.message.includes('token') ? 401 : 500).json({ error: err.message })
   }
 })

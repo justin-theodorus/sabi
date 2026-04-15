@@ -31,7 +31,7 @@ services:
       - "8000:8000"   # Proxy — all client traffic enters here
       - "8100:8001"   # Admin API — mapped to 8100 on host to avoid conflict with dialogue-engine
     depends_on:
-      - dialogue-engine
+      - dialogue-queue-api
       - expression-service
       - session-service
       - persona-engine
@@ -44,8 +44,11 @@ services:
 
   dialogue-engine:
     build: ./dialogue-engine
-    ports:
-      - "8001:8001"
+    # Uncomment ports for direct stress testing (DialogueDirectStressUser):
+    #   locust --host http://localhost:8001
+    # Comment out again after testing — dialogue-engine is internal-only in production.
+    # ports:
+    #   - "8001:8001"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
@@ -54,6 +57,31 @@ services:
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
+
+  dialogue-queue-api:
+    build: ./dialogue-queue
+    ports:
+      - "8006:8006"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DIALOGUE_ENGINE_URL=http://dialogue-engine:8001
+    depends_on:
+      - redis
+      - dialogue-engine
+
+  dialogue-queue-worker:
+    build: ./dialogue-queue
+    command: node worker.js
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DIALOGUE_ENGINE_URL=http://dialogue-engine:8001
+      # Concurrent Claude calls per worker pod.
+      # Scale pods with: docker-compose up --scale dialogue-queue-worker=3
+      # Total max Claude calls = replicas × WORKER_CONCURRENCY (keep ≤ your Anthropic tier limit)
+      - WORKER_CONCURRENCY=2
+    depends_on:
+      - redis
+      - dialogue-engine
 
   aac-icon-service:
     build: ./aac-icon-service

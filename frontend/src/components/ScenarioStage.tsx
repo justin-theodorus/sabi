@@ -10,6 +10,32 @@ interface ScenarioStageProps {
   backgroundSrc?: string;
   npcSrc?: string;
   npcEmotion?: string; // NPC's current emotion (happy, sad, mad, confused, surprised, neutral)
+  activeEventText?: string | null; // text shown in the intruder event bubble
+}
+
+/** A secondary speech bubble used for unexpected scenario events */
+function IntruderBubble({ text }: { text: string }) {
+  return (
+    <div
+      className="absolute left-3 top-3 max-w-[55%] animate-in fade-in slide-in-from-top-2 duration-300"
+      style={{ zIndex: 5 }}
+    >
+      <div className="relative bg-amber-50 border-2 border-amber-400 rounded-2xl rounded-tl-sm px-3 py-2 shadow-lg">
+        <div className="flex items-start gap-1.5">
+          <span className="text-base flex-shrink-0 mt-0.5">⚠️</span>
+          <p className="text-gray-800 text-xs font-semibold leading-snug italic">{text}</p>
+        </div>
+        {/* Tail */}
+        <div className="absolute -top-0.5 left-3 w-0 h-0"
+          style={{
+            borderLeft: '6px solid transparent',
+            borderRight: '6px solid transparent',
+            borderBottom: '7px solid #f59e0b',
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function ScenarioStage({
@@ -18,6 +44,7 @@ export default function ScenarioStage({
   backgroundSrc = "/backgrounds/hawker-centre.jpg",
   npcSrc = "/npc/hawker-uncle.png",
   npcEmotion,
+  activeEventText,
 }: ScenarioStageProps) {
   const [bgError, setBgError] = useState(false);
   const [npcError, setNpcError] = useState(false);
@@ -80,6 +107,9 @@ export default function ScenarioStage({
 
       {/* z=4: Speech bubble */}
       <SpeechBubble text={npcResponse} loading={npcLoading} />
+
+      {/* z=5: Intruder event bubble */}
+      {activeEventText && <IntruderBubble text={activeEventText} />}
     </div>
   );
 }

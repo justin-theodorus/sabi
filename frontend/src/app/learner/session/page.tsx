@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { sendDialogue, judgeResponse, type Message } from '@/lib/dialogue'
+import { streamDialogue, judgeResponse, type Message } from '@/lib/dialogue'
+import type { ScenarioEvent } from '@/lib/scenarios'
+import { ICONS } from '@/components/AACBoard'
 import { summarizeEmotionLog } from '@/lib/emotion-summary'
 import { translateIcons } from '@/lib/aac-translate'
-import { startSession, endSession, logEvent } from '@/lib/session'
+import { startSession, endSession, logEvent, keepAlive } from '@/lib/session'
 import { uploadSessionVideo } from '@/lib/minio-upload'
 import { SCENARIOS } from '@/lib/scenarios'
 import { useWebcam } from '@/hooks/useWebcam'
@@ -21,6 +23,8 @@ import HeartsBar from '@/components/HeartsBar'
 import SabiHintBar from '@/components/SabiHintBar'
 
 const SURVIVAL_TIMEOUT_SEC = 30
+const BUMP_SEC_SURVIVAL = 15   // NPC speaks first after 15s in survival
+const BUMP_SEC_LEARNING = 20   // NPC speaks first after 20s in learning
 const MAX_HEARTS = 5
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
@@ -41,8 +45,25 @@ function getInitialMode(): 'learning' | 'survival' {
   return (sessionStorage.getItem('selectedMode') as 'learning' | 'survival') ?? 'learning'
 }
 
-function getInitialScenario() {
+function getInitialScenario(): ScenarioConfig {
   if (typeof window === 'undefined') return SCENARIOS.hawker_centre
+  try {
+    const raw = sessionStorage.getItem('selectedScenarioConfig')
+    if (raw) {
+      const parsed = JSON.parse(raw) as ScenarioConfig
+      if (parsed?.id) {
+        // Sanitize stale or bad npc/background values — if they don't look like
+        // real paths (e.g. leftover "1 Twist" from the unpredictableEvents bug),
+        // fall back to the base scenario's assets.
+        if (parsed.baseScenario) {
+          const base = SCENARIOS[parsed.baseScenario] ?? SCENARIOS.hawker_centre
+          if (!parsed.npc?.startsWith('/')) parsed.npc = base.npc
+          if (!parsed.background?.startsWith('/')) parsed.background = base.background
+        }
+        return parsed
+      }
+    }
+  } catch {}
   const id = sessionStorage.getItem('selectedScenario')
   return (id && SCENARIOS[id]) ? SCENARIOS[id] : SCENARIOS.hawker_centre
 }
@@ -52,6 +73,27 @@ function playAudio(base64: string) {
     const audio = new Audio(`data:audio/mp3;base64,${base64}`)
     audio.play().catch(() => {})
   } catch {}
+}
+
+// ── Audio queue for streaming TTS chunks ──────────────────────────────────
+// Plays audio chunks in order as they arrive from the SSE stream.
+const audioQueueRef = { current: [] as string[] }
+const audioPlayingRef = { current: false }
+
+function drainAudioQueue() {
+  const next = audioQueueRef.current.shift()
+  if (!next) { audioPlayingRef.current = false; return }
+  audioPlayingRef.current = true
+  try {
+    const audio = new Audio(`data:audio/mp3;base64,${next}`)
+    audio.onended = drainAudioQueue
+    audio.play().catch(() => { audioPlayingRef.current = false; drainAudioQueue() })
+  } catch { audioPlayingRef.current = false; drainAudioQueue() }
+}
+
+function enqueueAudio(base64: string) {
+  audioQueueRef.current.push(base64)
+  if (!audioPlayingRef.current) drainAudioQueue()
 }
 
 function buildMoodModifier(): string | null {
@@ -300,10 +342,24 @@ export default function PracticePage() {
   const [history, setHistory] = useState<Message[]>([])
   const [hearts, setHearts] = useState(MAX_HEARTS)
   const [sessionOver, setSessionOver] = useState(false)
+  const [turnIndex, setTurnIndex] = useState(0)
+
+  // Unexpected events
+  const [rolledEvent, setRolledEvent] = useState<ScenarioEvent | null>(null)
+  const eventTriggerTurnRef = useRef<number>(0)
+  const [activeEventText, setActiveEventText] = useState<string | null>(null)
+  // Refs for values needed inside timer callbacks (avoid stale closures)
+  const historyRef = useRef<Message[]>([])
+  const turnIndexRef = useRef<number>(0)
+  const heartsRef = useRef<number>(MAX_HEARTS)
+  const npcLoadingRef = useRef<boolean>(false)
+  const sessionOverRef = useRef<boolean>(false)
+  const rolledEventRef = useRef<ScenarioEvent | null>(null)
 
   // Countdown
   const [timeLeft, setTimeLeft] = useState(SURVIVAL_TIMEOUT_SEC)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const bumpRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Webcam
   const [webcamActive, setWebcamActive] = useState(false)
@@ -312,6 +368,15 @@ export default function PracticePage() {
   const latencySamplesRef = useRef<number[]>([])
   const iconCountSamplesRef = useRef<number[]>([])
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wasNpcInitiatedRef = useRef<boolean>(false)
+
+  // Keep refs in sync with state for timer callbacks
+  historyRef.current = history
+  turnIndexRef.current = turnIndex
+  heartsRef.current = hearts
+  npcLoadingRef.current = npcLoading
+  sessionOverRef.current = sessionOver
+  rolledEventRef.current = rolledEvent
 
   const { videoRef, canvasRef, captureFrameRef, startWebcam, stopWebcam, captureFrame, startRecording, stopRecording } = useWebcam()
   const { getEmotionLog, resetEmotionLog } = useEmotionCapture({
@@ -332,6 +397,13 @@ export default function PracticePage() {
       setAuthChecked(true)
     })
   }, [router])
+
+  // ── Session heartbeat — keeps Redis alive key refreshed every 10s ──────
+  useEffect(() => {
+    if (phase !== 'in_session' || !sessionId || !authToken) return
+    const id = setInterval(() => keepAlive(authToken, sessionId), 10_000)
+    return () => clearInterval(id)
+  }, [phase, sessionId, authToken])
 
   // ── Fetch history once auth is ready ──────────────────────
   useEffect(() => {
@@ -356,6 +428,21 @@ export default function PracticePage() {
 
     async function init() {
       setNpcResponse(scenario.npcGreeting)
+      setTurnIndex(0)
+      setActiveEventText(null)
+
+      // Roll a random unexpected event (if scenario has any)
+      const events = scenario.events ?? []
+      if (events.length > 0) {
+        const picked = events[Math.floor(Math.random() * events.length)]
+        setRolledEvent(picked)
+        // Trigger between turn 2 and 4
+        eventTriggerTurnRef.current = Math.floor(Math.random() * 3) + 2
+      } else {
+        setRolledEvent(null)
+        eventTriggerTurnRef.current = 0
+      }
+
       try {
         const id = await startSession(authToken!, scenario.id, mode, persona)
         setSessionId(id)
@@ -365,14 +452,14 @@ export default function PracticePage() {
       messageStartTimeRef.current = Date.now()
       const camOk = await startWebcam()
       if (camOk) { startRecording(); setWebcamActive(true) }
-      if (mode === 'survival') startSurvivalTimer()
+      startIdleTimer()
     }
 
     init()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  // ── Survival timer ────────────────────────────────────────
+  // ── Timers ────────────────────────────────────────────────
   const deductHeart = useCallback(async (reason: 'timeout' | 'off_context') => {
     setHearts((prev) => {
       const next = prev - 1
@@ -383,28 +470,42 @@ export default function PracticePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, authToken])
 
-  function startSurvivalTimer() {
-    clearSurvivalTimer()
-    setTimeLeft(SURVIVAL_TIMEOUT_SEC)
-    countdownRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) { if (countdownRef.current) clearInterval(countdownRef.current); return 0 }
-        return prev - 1
-      })
-    }, 1000)
-    timeoutRef.current = setTimeout(() => deductHeart('timeout'), SURVIVAL_TIMEOUT_SEC * 1000)
+  // triggerNpcBump is defined after handleSubmit — store a ref so startIdleTimer can call it
+  const triggerNpcBumpRef = useRef<(() => void) | null>(null)
+
+  function startIdleTimer() {
+    clearIdleTimer()
+    const bumpSec = mode === 'survival' ? BUMP_SEC_SURVIVAL : BUMP_SEC_LEARNING
+
+    if (mode === 'survival') {
+      setTimeLeft(SURVIVAL_TIMEOUT_SEC)
+      countdownRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) { if (countdownRef.current) clearInterval(countdownRef.current); return 0 }
+          return prev - 1
+        })
+      }, 1000)
+      // Stage 2: deduct heart at full timeout
+      timeoutRef.current = setTimeout(() => deductHeart('timeout'), SURVIVAL_TIMEOUT_SEC * 1000)
+    }
+
+    // Stage 1: NPC bump (both modes)
+    bumpRef.current = setTimeout(() => {
+      triggerNpcBumpRef.current?.()
+    }, bumpSec * 1000)
   }
 
-  function clearSurvivalTimer() {
+  function clearIdleTimer() {
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null }
+    if (bumpRef.current) { clearTimeout(bumpRef.current); bumpRef.current = null }
   }
 
-  useEffect(() => () => clearSurvivalTimer(), [])
+  useEffect(() => () => clearIdleTimer(), [])
 
   // ── Session end ───────────────────────────────────────────
   async function endSessionFlow(finalHearts: number) {
-    clearSurvivalTimer()
+    clearIdleTimer()
     setSessionOver(true)
     stopWebcam(); setWebcamActive(false)
 
@@ -449,7 +550,7 @@ export default function PracticePage() {
 
   // ── Go back to lobby ──────────────────────────────────────
   function handleBackToLobby() {
-    clearSurvivalTimer()
+    clearIdleTimer()
     if (sessionId && authToken && !sessionOver) {
       endSession(authToken, sessionId, hearts).catch(() => {})
     }
@@ -483,24 +584,99 @@ export default function PracticePage() {
   function handleRemoveIcon(index: number) { setSelectedIcons((p) => p.filter((_, i) => i !== index)) }
   function handleClear() { setSelectedIcons([]) }
 
+  // ── Available icon labels (scenario-specific + core words) ──
+  // Memoized so the array reference is stable across renders — prevents the
+  // SabiHintBar useEffect from resetting its 4-second timer on every render.
+  const availableIconLabels = useMemo(() => [
+    ...ICONS.filter((i) => i.category === 'core_words').map((i) => i.label),
+    ...scenario.scenarioIcons.map((i) => i.label),
+  ], [scenario.scenarioIcons])
+
+  // ── NPC bump (called after idle timeout, Stage 1) ─────────
+  async function triggerNpcBump() {
+    // Use refs to avoid stale closure (called from setTimeout)
+    if (npcLoadingRef.current || sessionOverRef.current) return
+    setNpcLoading(true)
+    npcLoadingRef.current = true
+    try {
+      const currentTurn = turnIndexRef.current
+      const currentHistory = historyRef.current
+      const currentRolledEvent = rolledEventRef.current
+      const currentHearts = heartsRef.current
+
+      const isEventTurn = currentRolledEvent && eventTriggerTurnRef.current > 0 && currentTurn >= eventTriggerTurnRef.current
+      const eventContext = isEventTurn ? currentRolledEvent!.context : undefined
+
+      if (isEventTurn) setActiveEventText(currentRolledEvent!.npcLine)
+
+      let bumpText = ''
+      let bumpComplete = false
+      await streamDialogue('', currentHistory, {
+        scenario_id: scenario.baseScenario ?? scenario.id, mode, persona,
+        mood_modifier: moodModifier ?? undefined,
+        available_icons: availableIconLabels,
+        turn_index: currentTurn,
+        npc_initiated: true,
+        npc_personality: scenario.npcPersonality,
+        support_level: scenario.supportLevel,
+        active_event: eventContext,
+      }, {
+        onText: (chunk) => { bumpText += chunk; setNpcResponse(bumpText) },
+        onAudio: (_, b64) => enqueueAudio(b64),
+        onDone: (emotion, complete, fullText) => {
+          setNpcEmotion(emotion); setNpcResponse(fullText); bumpComplete = complete
+        },
+      })
+
+      const newHistory: Message[] = [...currentHistory, { role: 'assistant', content: bumpText }]
+      setHistory(newHistory)
+      if (sessionId && authToken) logEvent(authToken, sessionId, 'npc_response', { content: bumpText, npc_initiated: true })
+      wasNpcInitiatedRef.current = true
+      if (bumpComplete) { endSessionFlow(currentHearts); return }
+    } catch {}
+    finally { setNpcLoading(false); npcLoadingRef.current = false }
+    // Restart idle timer after bump
+    startIdleTimer()
+  }
+
+  // Wire bump ref so the timer callback can reach it
+  triggerNpcBumpRef.current = triggerNpcBump
+
   // ── Submit ────────────────────────────────────────────────
   async function handleSubmit() {
     if (selectedIcons.length === 0 || npcLoading || sessionOver) return
-    clearSurvivalTimer()
+    clearIdleTimer()
 
+    const currentTurn = turnIndex
     const iconsUsed = [...selectedIcons]
     iconCountSamplesRef.current.push(iconsUsed.length)
     if (messageStartTimeRef.current !== null) latencySamplesRef.current.push(Date.now() - messageStartTimeRef.current)
 
+    const responseLatencyMs = messageStartTimeRef.current !== null ? Date.now() - messageStartTimeRef.current : null
     const message = await translateIcons(iconsUsed.map((i) => i.label))
     setSelectedIcons([]); setNpcLoading(true); setNpcResponse(null)
 
-    if (sessionId && authToken) logEvent(authToken, sessionId, 'icon_selection', { icons: iconsUsed.map((i) => i.label), translated: message })
+    const afterNpcPrompt = wasNpcInitiatedRef.current
+    wasNpcInitiatedRef.current = false
+    if (sessionId && authToken) logEvent(authToken, sessionId, 'icon_selection', {
+      icons: iconsUsed.map((i) => i.label),
+      translated: message,
+      response_latency_ms: responseLatencyMs,
+      turn_index: currentTurn,
+      is_repair: npcEmotion === 'confused',
+      after_npc_prompt: afterNpcPrompt,
+    })
+
+    // Determine if this turn triggers the rolled event
+    const isEventTurn = rolledEvent && eventTriggerTurnRef.current > 0 && currentTurn >= eventTriggerTurnRef.current && currentTurn < eventTriggerTurnRef.current + 2
+    const eventContext = isEventTurn ? rolledEvent!.context : undefined
+    if (isEventTurn && currentTurn === eventTriggerTurnRef.current) setActiveEventText(rolledEvent!.npcLine)
+    if (currentTurn >= (eventTriggerTurnRef.current + 2)) setActiveEventText(null)
 
     try {
       if (mode === 'survival' && history.length > 0) {
         const lastNpc = history.findLast((m) => m.role === 'assistant')?.content ?? ''
-        if (await judgeResponse(scenario.id, lastNpc, message)) {
+        if (await judgeResponse(scenario.baseScenario ?? scenario.id, lastNpc, message)) {
           await deductHeart('off_context')
           if (hearts - 1 <= 0) { setNpcLoading(false); return }
         }
@@ -508,30 +684,45 @@ export default function PracticePage() {
 
       const emotionLog = getEmotionLog()
       const emotionSummary = await summarizeEmotionLog(emotionLog)
-      const result = await sendDialogue(message, history, {
-        scenario_id: scenario.id, mode, persona,
+      let replyText = ''
+      let replyComplete = false
+      await streamDialogue(message, history, {
+        scenario_id: scenario.baseScenario ?? scenario.id, mode, persona,
         mood_modifier: moodModifier ?? undefined,
         emotion: emotionSummary ? { summary_emotion: emotionSummary.summary_emotion, explanation: emotionSummary.explanation, avg_score: emotionSummary.avg_score } : undefined,
+        available_icons: availableIconLabels,
+        turn_index: currentTurn,
+        npc_personality: scenario.npcPersonality,
+        support_level: scenario.supportLevel,
+        npc_initiated: false,
+        active_event: eventContext,
+      }, {
+        onText: (chunk) => { replyText += chunk; setNpcResponse(replyText) },
+        onAudio: (_, b64) => enqueueAudio(b64),
+        onDone: (emotion, complete, fullText) => {
+          setNpcEmotion(emotion); setNpcResponse(fullText); replyComplete = complete
+        },
       })
       resetEmotionLog()
 
-      const newHistory: Message[] = [...history, { role: 'user', content: message }, { role: 'assistant', content: result.response }]
-      setHistory(newHistory); setNpcResponse(result.response); setNpcEmotion(result.npc_emotion)
+      setTurnIndex((t) => t + 1)
+      const newHistory: Message[] = [...history, { role: 'user', content: message }, { role: 'assistant', content: replyText }]
+      setHistory(newHistory)
       messageStartTimeRef.current = Date.now()
-      if (result.audio_base64) playAudio(result.audio_base64)
-      if (sessionId && authToken) logEvent(authToken, sessionId, 'npc_response', { content: result.response })
-      if (mode === 'survival' && hearts > 0) startSurvivalTimer()
+      if (sessionId && authToken) logEvent(authToken, sessionId, 'npc_response', { content: replyText })
+      if (replyComplete) { endSessionFlow(hearts); return }
+      startIdleTimer()
     } catch (err) {
       console.error('Dialogue error:', err)
       setNpcResponse("Sorry, I didn't catch that. Could you try again?")
-      if (mode === 'survival') startSurvivalTimer()
+      startIdleTimer()
     } finally {
       setNpcLoading(false)
     }
   }
 
   async function handleSignOut() {
-    clearSurvivalTimer()
+    clearIdleTimer()
     if (sessionId && authToken && !sessionOver) await endSession(authToken, sessionId, hearts)
     await supabase.auth.signOut()
     router.push('/')
@@ -666,7 +857,7 @@ export default function PracticePage() {
       <div className="flex-1 flex gap-3 p-3 overflow-hidden">
         <div className="w-[45%] flex-shrink-0 flex flex-col gap-2">
           <div className="flex-1 min-h-0 relative">
-            <ScenarioStage npcResponse={npcResponse} npcLoading={npcLoading} backgroundSrc={scenario.background} npcSrc={scenario.npc} npcEmotion={npcEmotion} />
+            <ScenarioStage npcResponse={npcResponse} npcLoading={npcLoading} backgroundSrc={scenario.background} npcSrc={scenario.npc} npcEmotion={npcEmotion} activeEventText={activeEventText} />
             {/* Hidden camera elements — keep running for emotion capture & recording */}
             <video ref={videoRef} muted playsInline className="hidden" />
             <canvas ref={canvasRef} className="hidden" />
@@ -688,8 +879,8 @@ export default function PracticePage() {
               </div>
             )}
           </div>
-          {mode === 'learning' && (
-            <SabiHintBar scenarioId={scenario.id} npcLastMessage={npcResponse} visible={!npcLoading && !!npcResponse} />
+          {mode === 'learning' && scenario.hintLevel !== 'No hints' && (
+            <SabiHintBar scenarioId={scenario.baseScenario ?? scenario.id} npcLastMessage={npcResponse} visible={!npcLoading && !!npcResponse} availableIcons={availableIconLabels} />
           )}
         </div>
         <div className="flex-1 flex flex-col gap-3 min-h-0">

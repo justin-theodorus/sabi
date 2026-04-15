@@ -4,50 +4,50 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
+import { fetchScenariosFromDB, type ScenarioConfig } from '@/lib/scenarios'
 import { LearnerBottomNav } from '@/components/LearnerNav'
 import CommunityIcon from '@/assets/CommunityHome.png'
 import SchoolIcon from '@/assets/SchoolHome.png'
 import HomeIcon from '@/assets/Homehome.png'
+import type { StaticImageData } from 'next/image'
 
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
-// Scene → category mapping for icons
-const SCENES = [
-  {
-    id: 'hawker_centre',
-    title: 'Hawker Centre',
-    subtitle: 'Order at a food stall',
-    difficulty: 'Intermediate',
-    category: 'Community',
-    icon: CommunityIcon,
-  },
-  {
-    id: 'group_project',
-    title: 'Group Project',
-    subtitle: 'Work with teammates',
-    difficulty: 'Beginner',
-    category: 'School',
-    icon: SchoolIcon,
-  },
-  {
-    id: 'queue_shop',
-    title: 'Queue / Shop',
-    subtitle: 'Buy something at a shop',
-    difficulty: 'Beginner',
-    category: 'Home',
-    icon: HomeIcon,
-  },
-]
+// Maps base scenario id → display metadata used on the home page cards
+const BASE_META: Record<string, { category: string; subtitle: string; difficulty: string; icon: StaticImageData }> = {
+  hawker_centre: { category: 'Community', subtitle: 'Order at a food stall',     difficulty: 'Intermediate', icon: CommunityIcon },
+  group_project: { category: 'School',    subtitle: 'Work with teammates',        difficulty: 'Beginner',     icon: SchoolIcon },
+  queue_shop:    { category: 'Home',      subtitle: 'Buy something at a shop',    difficulty: 'Beginner',     icon: HomeIcon },
+}
+
+// Derives a difficulty label from the support_level therapist field
+function supportToDifficulty(level?: string): string {
+  switch (level) {
+    case 'High':        return 'Beginner'
+    case 'Moderate':    return 'Intermediate'
+    case 'Low':         return 'Advanced'
+    case 'Independent': return 'Expert'
+    default:            return 'Intermediate'
+  }
+}
 
 type Mode = 'learning' | 'survival'
-type Scene = typeof SCENES[number]
+
+interface SceneCard {
+  config: ScenarioConfig
+  category: string
+  subtitle: string
+  difficulty: string
+  icon: StaticImageData
+  isCustom: boolean
+}
 
 function ModeModal({
   scene,
   onSelect,
   onClose,
 }: {
-  scene: Scene
+  scene: SceneCard
   onSelect: (mode: Mode) => void
   onClose: () => void
 }) {
@@ -57,8 +57,8 @@ function ModeModal({
       <div className="relative bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Scene</p>
-          <h3 className="text-gray-900 font-extrabold text-xl leading-tight mt-0.5">{scene.title}</h3>
-          <p className="text-gray-400 text-sm mt-0.5">{scene.subtitle}</p>
+          <h3 className="text-gray-900 font-extrabold text-xl leading-tight mt-0.5">{scene.config.title}</h3>
+          <p className="text-gray-400 text-sm mt-0.5">{scene.config.description || scene.subtitle}</p>
         </div>
 
         <p className="text-gray-500 text-sm font-semibold mb-3">Choose your mode</p>
@@ -100,7 +100,8 @@ export default function LearnerHomePage() {
   const [authChecked, setAuthChecked] = useState(false)
   const [authToken, setAuthToken]     = useState<string | null>(null)
   const [userName, setUserName]       = useState('Learner')
-  const [selectedScene, setSelectedScene] = useState<Scene | null>(null)
+  const [selectedScene, setSelectedScene] = useState<SceneCard | null>(null)
+  const [scenes, setScenes] = useState<SceneCard[]>([])
   const [lastSession, setLastSession] = useState<{
     scenario_id: string; mode: string; status: string
   } | null>(null)
@@ -117,6 +118,24 @@ export default function LearnerHomePage() {
   }, [router])
 
   useEffect(() => {
+    fetchScenariosFromDB().then((all) => {
+      const cards: SceneCard[] = Object.values(all).map((config) => {
+        const baseKey = config.baseScenario ?? config.id
+        const meta = BASE_META[baseKey] ?? BASE_META.hawker_centre
+        return {
+          config,
+          category: meta.category,
+          subtitle: meta.subtitle,
+          difficulty: config.supportLevel ? supportToDifficulty(config.supportLevel) : meta.difficulty,
+          icon: meta.icon,
+          isCustom: !!config.baseScenario,
+        }
+      })
+      setScenes(cards)
+    })
+  }, [])
+
+  useEffect(() => {
     if (!authToken) return
     fetch(`${SESSION_URL}/sessions`, { headers: { Authorization: `Bearer ${authToken}` } })
       .then((r) => r.json())
@@ -130,21 +149,21 @@ export default function LearnerHomePage() {
     if (!selectedScene) return
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('selectedMode', mode)
-      sessionStorage.setItem('selectedScenario', selectedScene.id)
+      sessionStorage.setItem('selectedScenario', selectedScene.config.id)
+      sessionStorage.setItem('selectedScenarioConfig', JSON.stringify(selectedScene.config))
     }
     setSelectedScene(null)
     router.push('/learner/session')
   }
 
   function handleContinue() {
-    if (!lastSession) {
-      // Default to first scene
-      sessionStorage.setItem('selectedMode', 'learning')
-      sessionStorage.setItem('selectedScenario', 'hawker_centre')
-    } else {
-      sessionStorage.setItem('selectedMode', lastSession.mode)
-      sessionStorage.setItem('selectedScenario', lastSession.scenario_id)
-    }
+    const heroScene = lastSession
+      ? scenes.find((s) => s.config.id === lastSession.scenario_id) ?? scenes[0]
+      : scenes[0]
+    if (!heroScene) return
+    sessionStorage.setItem('selectedMode', lastSession?.mode ?? 'learning')
+    sessionStorage.setItem('selectedScenario', heroScene.config.id)
+    sessionStorage.setItem('selectedScenarioConfig', JSON.stringify(heroScene.config))
     router.push('/learner/session')
   }
 
@@ -157,8 +176,11 @@ export default function LearnerHomePage() {
   }
 
   const heroScene = lastSession
-    ? SCENES.find((s) => s.id === lastSession.scenario_id) ?? SCENES[0]
-    : SCENES[0]
+    ? scenes.find((s) => s.config.id === lastSession.scenario_id) ?? scenes[0]
+    : scenes[0]
+
+  const baseScenes    = scenes.filter((s) => !s.isCustom)
+  const customScenes  = scenes.filter((s) => s.isCustom)
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -169,25 +191,27 @@ export default function LearnerHomePage() {
         <p className="text-gray-400 text-sm mt-1">Let&apos;s practice today.</p>
 
         {/* Yellow hero card */}
-        <div className="mt-5 bg-[#F5C842] rounded-2xl p-5">
-          <span className="inline-block bg-black/20 text-[#5A4800] text-xs font-semibold px-3 py-1 rounded-full">
-            {heroScene.difficulty}
-          </span>
-          <p className="text-gray-900 font-extrabold text-xl mt-2">{heroScene.title}</p>
-          <p className="text-gray-700 text-sm mt-0.5">{heroScene.subtitle}</p>
-          <button
-            onClick={handleContinue}
-            className="mt-4 w-full bg-white text-gray-900 font-bold text-sm py-3.5 rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors active:scale-[0.98]"
-          >
-            Continue this lesson <span>→</span>
-          </button>
-        </div>
-
-        {/* Scene cards */}
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          {SCENES.map((scene) => (
+        {heroScene && (
+          <div className="mt-5 bg-[#F5C842] rounded-2xl p-5">
+            <span className="inline-block bg-black/20 text-[#5A4800] text-xs font-semibold px-3 py-1 rounded-full">
+              {heroScene.difficulty}
+            </span>
+            <p className="text-gray-900 font-extrabold text-xl mt-2">{heroScene.config.title}</p>
+            <p className="text-gray-700 text-sm mt-0.5">{heroScene.config.description || heroScene.subtitle}</p>
             <button
-              key={scene.id}
+              onClick={handleContinue}
+              className="mt-4 w-full bg-white text-gray-900 font-bold text-sm py-3.5 rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors active:scale-[0.98]"
+            >
+              Continue this lesson <span>→</span>
+            </button>
+          </div>
+        )}
+
+        {/* Base scenario cards */}
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          {baseScenes.map((scene) => (
+            <button
+              key={scene.config.id}
               onClick={() => setSelectedScene(scene)}
               className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-gray-100 flex flex-col items-start text-left hover:shadow-[0_4px_16px_rgba(0,0,0,0.10)] transition-shadow active:scale-[0.98]"
             >
@@ -204,6 +228,37 @@ export default function LearnerHomePage() {
             </button>
           ))}
         </div>
+
+        {/* Custom scenario cards (therapist-created) */}
+        {customScenes.length > 0 && (
+          <div className="mt-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">From your therapist</p>
+            <div className="flex flex-col gap-3">
+              {customScenes.map((scene) => {
+                const baseMeta = BASE_META[scene.config.baseScenario ?? 'hawker_centre'] ?? BASE_META.hawker_centre
+                return (
+                  <button
+                    key={scene.config.id}
+                    onClick={() => setSelectedScene(scene)}
+                    className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-gray-100 flex items-center gap-4 text-left hover:shadow-[0_4px_16px_rgba(0,0,0,0.10)] transition-shadow active:scale-[0.98]"
+                  >
+                    <div className="flex-shrink-0">
+                      <Image src={baseMeta.icon} alt={baseMeta.category} width={40} height={40} className="object-contain" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900 text-sm leading-tight">{scene.config.title}</p>
+                      <p className="text-gray-400 text-xs mt-0.5 line-clamp-1">{scene.config.description || baseMeta.subtitle}</p>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                      <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{scene.difficulty}</span>
+                      <span className="text-[10px] text-gray-400">{baseMeta.category}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </main>
 
       <LearnerBottomNav />

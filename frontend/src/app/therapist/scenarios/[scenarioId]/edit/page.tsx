@@ -44,6 +44,7 @@ export default function EditScenarioPage() {
       }
 
       setInitial({
+        base_scenario: data.base_scenario ?? 'hawker_centre',
         name: data.name ?? '',
         description: data.description ?? '',
         slug: data.slug ?? '',
@@ -67,6 +68,7 @@ export default function EditScenarioPage() {
     const { error: err } = await supabase
       .from('scenarios')
       .update({
+        base_scenario: data.base_scenario,
         name: data.name.trim(),
         description: data.description.trim() || null,
         slug,

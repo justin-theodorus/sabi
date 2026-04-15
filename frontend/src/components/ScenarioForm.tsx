@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 export interface ScenarioFormData {
+  base_scenario: string   // hawker_centre | group_project | queue_shop
   name: string
   description: string
   slug: string
@@ -14,7 +15,7 @@ export interface ScenarioFormData {
   support_level: string
   hint_level: string
   mode: string
-  scenario_icons: string  // comma-separated "label:id" pairs, e.g. "eat:eat,drink:drink"
+  scenario_icons: string  // comma-separated labels, e.g. "chicken rice, noodle, drink"
 }
 
 interface Props {
@@ -31,6 +32,7 @@ const SELECT_CLASS =
 
 export default function ScenarioForm({ initial = {}, onSubmit, submitLabel = 'Save Scenario' }: Props) {
   const [form, setForm] = useState<ScenarioFormData>({
+    base_scenario: initial.base_scenario ?? 'hawker_centre',
     name: initial.name ?? '',
     description: initial.description ?? '',
     slug: initial.slug ?? '',
@@ -77,6 +79,19 @@ export default function ScenarioForm({ initial = {}, onSubmit, submitLabel = 'Sa
           {fieldError}
         </div>
       )}
+
+      {/* Base scenario */}
+      <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-200">Base Scenario *</h2>
+        <p className="text-xs text-gray-400">
+          Custom scenarios are variations of one of the three built-in scenes. The base determines the NPC, background, and event pool — you can override any of them below.
+        </p>
+        <select value={form.base_scenario} onChange={update('base_scenario')} className={SELECT_CLASS} required>
+          <option value="hawker_centre">Hawker Centre — ordering food at a stall</option>
+          <option value="group_project">Group Project — collaborating with classmates</option>
+          <option value="queue_shop">Queue / Shop — confronting someone who cut the queue</option>
+        </select>
+      </div>
 
       {/* Basic info */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 space-y-4">

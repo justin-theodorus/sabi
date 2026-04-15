@@ -35,7 +35,13 @@ const CATEGORY_ICON: Record<Category, React.ReactNode> = {
 const BUILTIN_CATEGORY: Record<string, Category> = {
   'Hawker Centre': 'Community',
   'Group Project':  'School',
-  'Queue / Shop':   'Community',
+  'Queue / Shop':   'Home',
+}
+
+const BASE_TO_CATEGORY: Record<string, Category> = {
+  hawker_centre: 'Community',
+  group_project: 'School',
+  queue_shop:    'Home',
 }
 
 const BUILTIN_DIFFICULTY: Record<string, { label: string; color: string }> = {
@@ -56,6 +62,7 @@ interface DBScenario {
   name: string
   description: string | null
   slug: string | null
+  base_scenario: string | null
   mode: string
   npc_personality: string | null
   support_level: string | null
@@ -83,12 +90,7 @@ const BLANK: ScenarioForm = {
 }
 
 function getCategory(sc: DBScenario): Category {
-  if (sc.created_by) {
-    const s = sc.slug?.toLowerCase()
-    if (s === 'home')   return 'Home'
-    if (s === 'school') return 'School'
-    return 'Community'
-  }
+  if (sc.base_scenario) return BASE_TO_CATEGORY[sc.base_scenario] ?? 'Community'
   return BUILTIN_CATEGORY[sc.name] ?? 'Community'
 }
 
@@ -157,7 +159,7 @@ export default function ScenariosPage() {
       title: sc.name, description: sc.description ?? '', category: cat,
       supportLevel: sc.support_level ?? 'Moderate', modeAccess,
       hintLevel: sc.hint_level ?? 'Gentle nudge', npcPersonality: sc.npc_personality ?? 'Friendly',
-      unpredictableEvents: sc.npc_path ?? 'Off',
+      unpredictableEvents: sc.npc_path && ['Off','1 Twist','2+ Twist'].includes(sc.npc_path) ? sc.npc_path : 'Off',
     })
     setShowForm(true)
   }

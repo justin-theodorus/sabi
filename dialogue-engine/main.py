@@ -1,11 +1,17 @@
+import asyncio
 import base64
+import hashlib
+import json
 import os
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import anthropic
+import httpx
+import redis.asyncio as aioredis
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,6 +27,97 @@ app.add_middleware(
 )
 
 client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+async_client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+# ── Claude rate-limiting semaphore ────────────────────────────────────────────
+# Limits concurrent Anthropic API calls so excess requests queue internally
+# rather than hitting Anthropic's rate limiter and failing.
+# Value = max simultaneous Claude calls. Tune based on your Anthropic tier:
+#   Free/Tier-1: 3   Tier-2: 5   Tier-3+: 10
+_CLAUDE_CONCURRENCY = int(os.environ.get("CLAUDE_CONCURRENCY", "3"))
+_claude_sem = asyncio.Semaphore(_CLAUDE_CONCURRENCY)
+
+# ── Redis (optional — TTS cache falls back gracefully if unavailable) ─────────
+
+_redis: Optional[aioredis.Redis] = None
+
+async def get_redis() -> Optional[aioredis.Redis]:
+    global _redis
+    if _redis is not None:
+        return _redis
+    try:
+        r = aioredis.from_url(
+            os.environ.get("REDIS_URL", "redis://localhost:6379"),
+            encoding="utf-8",
+            decode_responses=False,
+            socket_connect_timeout=1,
+        )
+        await r.ping()
+        _redis = r
+        print("[redis] Connected")
+    except Exception as e:
+        print(f"[redis] Not available (TTS cache disabled): {e}")
+    return _redis
+
+
+def _tts_cache_key(text: str, voice_id: str) -> str:
+    h = hashlib.sha256(f"{voice_id}:{text}".encode()).hexdigest()
+    return f"tts:{h}"
+
+
+_elevenlabs_disabled = False  # set True on first 402 to skip all future calls this session
+
+async def text_to_speech_async(text: str, scenario_id: str) -> Optional[str]:
+    """Async TTS with Redis cache. Returns base64-encoded MP3 or None."""
+    global _elevenlabs_disabled
+    if not ELEVENLABS_API_KEY or not text.strip() or _elevenlabs_disabled:
+        return None
+    voice_id = SCENARIO_VOICE_IDS.get(scenario_id, DEFAULT_VOICE_ID)
+    cache_key = _tts_cache_key(text.strip(), voice_id)
+
+    r = await get_redis()
+    if r:
+        try:
+            cached = await r.get(cache_key)
+            if cached:
+                print(f"[tts-cache] HIT  chars={len(text)}")
+                return cached.decode() if isinstance(cached, bytes) else cached
+        except Exception:
+            pass
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            resp = await http.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
+                json={
+                    "text": text,
+                    "model_id": "eleven_turbo_v2_5",
+                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+                },
+            )
+        if resp.status_code == 200:
+            audio_b64 = base64.b64encode(resp.content).decode("utf-8")
+            if r:
+                try:
+                    await r.setex(cache_key, 7 * 24 * 3600, audio_b64)  # 7-day TTL
+                except Exception:
+                    pass
+            return audio_b64
+        elif resp.status_code == 402:
+            _elevenlabs_disabled = True
+            print("[tts] Free plan key detected — disabling TTS for this session")
+        else:
+            print(f"[tts] non-200: {resp.status_code}")
+    except Exception as e:
+        print(f"[tts] error: {e}")
+    return None
+
+
+def _is_sentence_end(text: str) -> bool:
+    """True if text ends with terminal punctuation (simple heuristic for short NPC lines)."""
+    t = text.rstrip()
+    return bool(t) and len(t) > 4 and t[-1] in {'.', '!', '?'}
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 print(f"[STARTUP] ElevenLabs API key: {'SET ✓' if ELEVENLABS_API_KEY else 'MISSING ✗'}")
@@ -140,8 +237,8 @@ MODE_PROMPTS = {
 # ── TTS ──────────────────────────────────────────────────────────────────────
 
 def text_to_speech_base64(text: str, scenario_id: str) -> Optional[str]:
-    """Call ElevenLabs and return base64-encoded MP3. Returns None if key missing."""
-    if not ELEVENLABS_API_KEY:
+    """Call ElevenLabs and return base64-encoded MP3. Returns None if key missing or free plan."""
+    if not ELEVENLABS_API_KEY or _elevenlabs_disabled:
         return None
     voice_id = SCENARIO_VOICE_IDS.get(scenario_id, DEFAULT_VOICE_ID)
     try:
@@ -157,6 +254,9 @@ def text_to_speech_base64(text: str, scenario_id: str) -> Optional[str]:
         )
         if response.status_code == 200:
             return base64.b64encode(response.content).decode("utf-8")
+        elif response.status_code == 402:
+            _elevenlabs_disabled = True
+            print("[tts] Free plan key detected — disabling TTS for this session")
         else:
             print(f"TTS non-200: {response.status_code} {response.text[:200]}")
     except Exception as e:
@@ -192,11 +292,17 @@ class DialogueRequest(BaseModel):
     custom_npc_prompt: Optional[str] = None    # Overrides SCENARIO_PROMPTS[scenario_id]
     npc_personality: Optional[str] = None      # "Friendly" | "Impatient" | "Confused"
     support_level: Optional[str] = None        # "High" | "Moderate" | "Low" | "Independent"
+    # Session-state fields for dynamic narrative and silence handling
+    available_icons: Optional[List[str]] = None  # icon labels on the learner's AAC board
+    turn_index: Optional[int] = None             # how many full turns have happened
+    npc_initiated: Optional[bool] = False         # True = NPC speaks without learner input (silence bump)
+    active_event: Optional[str] = None            # description of an unexpected event that just occurred
 
 class DialogueResponse(BaseModel):
     response: str
     audio_base64: Optional[str] = None
     npc_emotion: Optional[str] = None  # NPC's emotion based on response
+    session_complete: Optional[bool] = False
 
 class HintRequest(BaseModel):
     scenario_id: Optional[str] = "hawker_centre"
@@ -257,6 +363,10 @@ def build_system_prompt(
     custom_npc_prompt: Optional[str] = None,
     npc_personality: Optional[str] = None,
     support_level: Optional[str] = None,
+    available_icons: Optional[List[str]] = None,
+    turn_index: Optional[int] = None,
+    npc_initiated: bool = False,
+    active_event: Optional[str] = None,
 ) -> str:
     # Scenario base: use custom prompt if provided, else fall back to hardcoded
     scenario = custom_npc_prompt or SCENARIO_PROMPTS.get(scenario_id, SCENARIO_PROMPTS["hawker_centre"])
@@ -308,14 +418,53 @@ def build_system_prompt(
     if mood_modifier:
         parts.append(f"STORY MODIFIER: {mood_modifier}")
 
+    # AVAILABLE ICONS: Constrain NPC prompts to what the learner can actually express
+    if available_icons:
+        icons_list = ", ".join(available_icons)
+        parts.append(
+            f"AVAILABLE AAC ICONS: The learner can ONLY communicate using these icons: {icons_list}. "
+            "When asking questions or prompting a response, only prompt for things expressible with these icons. "
+            "Do NOT ask questions requiring concepts the learner cannot select."
+        )
+
+    # NARRATIVE PHASE: Guide the NPC toward a natural conclusion at late turns
+    if turn_index is not None:
+        if turn_index >= 7:
+            parts.append(
+                "NARRATIVE: This is an advanced turn. If the core task is logically complete "
+                "(order placed, topic resolved), naturally wrap up — confirm completion, say farewell, "
+                "conclude. Do not keep looping."
+            )
+        elif turn_index >= 4:
+            parts.append(
+                f"NARRATIVE: Turn {turn_index}. Begin moving toward a natural conclusion if the core task is done."
+            )
+
+    # NPC INITIATIVE: Learner has been silent — NPC should react without waiting
+    if npc_initiated:
+        parts.append(
+            "NPC INITIATIVE: The learner has been silent and not responded. React naturally — show impatience, "
+            "gently prompt them, or express frustration depending on your character and mode. "
+            "Speak as if nudging them to respond. Do NOT wait for them."
+        )
+
+    # ACTIVE EVENT: An unexpected interruption has occurred mid-scene
+    if active_event:
+        parts.append(
+            f"UNEXPECTED EVENT: {active_event}. React briefly in ONE short sentence, then immediately ask the learner what they want. "
+            "Do not describe actions. Do not narrate. Just speak out loud as you naturally would."
+        )
+
     # Global tail instructions
     parts.append(
-        "COMMUNICATION STYLE: Respond in clear English, but incorporate authentic local slang (Singlish) "
-        "if appropriate for the character. Keep responses short (1-2 sentences). "
-        "Prioritize authenticity and realism over being a 'helpful AI assistant'.\n"
+        "COMMUNICATION STYLE: Speak in plain, simple, direct English. Use Singlish only if it fits the character naturally. "
+        "STRICT LENGTH LIMIT: Maximum 1-2 short sentences per response. Never more. "
+        "Ask only ONE thing at a time. Do not list options. Do not give explanations. "
+        "STRICT FORMATTING RULE: Plain text only. "
+        "NEVER use asterisks (*), stars, bold, italics, brackets for actions, dashes as bullets, or any other markdown or stage-direction symbols. "
+        "Do not write actions like *turns to you* or *smiles*. Only write spoken words.\n"
         "PRIORITY RULE: If instructions conflict, the [MODE] behavior takes precedence. "
-        "In Survival Mode, authenticity and realism are more important than being supportive.\n"
-        "Never use markdown formatting. Do not use asterisks, bold, italics, bullet points, or any markdown symbols. Write in plain conversational text only."
+        "In Survival Mode, authenticity and realism are more important than being supportive."
     )
 
     prompt = "\n\n".join(filter(None, parts))
@@ -326,34 +475,39 @@ def build_system_prompt(
         + (f"  support_override={support_level}" if support_level else "")
         + (f"  custom_prompt=YES" if custom_npc_prompt else "")
         + (f"\n  emotion_context={emotion.summary_emotion} ({emotion.avg_score:.0f}%)" if emotion else "")
+        + (f"  turn_index={turn_index}" if turn_index is not None else "")
+        + (f"  npc_initiated=YES" if npc_initiated else "")
+        + (f"  active_event=YES" if active_event else "")
+        + (f"  icons={len(available_icons)}" if available_icons else "")
     )
     return prompt
 
 
 def detect_npc_emotion(response_text: str) -> str:
     """
-    Detect the NPC's emotion from their response text.
+    Detect NPC emotion via keyword heuristics — no extra Claude call.
     Returns one of: happy, sad, mad, confused, surprised, neutral
-    Based on tone, word choice, punctuation, and context clues.
     """
-    prompt = f"""Analyze this NPC response and determine which emotion the NPC is expressing.
-Based on tone, frustration level, politeness, sarcasm, and word choice.
+    t = response_text.lower()
+    if any(w in t for w in ["sorry", "sad", "disappoint", "upset", "unfortunate"]):
+        return "sad"
+    if any(w in t for w in ["?", "what do you mean", "don't understand", "huh", "unclear", "pardon"]):
+        return "confused"
+    if any(w in t for w in ["!", "angry", "frustrated", "rude", "excuse me", "seriously", "come on", "ridiculous", "nonsense"]):
+        if t.count("!") >= 1 or any(w in t for w in ["angry", "frustrated", "ridiculous", "seriously"]):
+            return "mad"
+    if any(w in t for w in ["wow", "really", "oh", "unexpected", "surprised", "can't believe"]):
+        return "surprised"
+    if any(w in t for w in ["thank", "great", "welcome", "happy", "glad", "good", "nice", "pleasure", "enjoy", "wonderful"]):
+        return "happy"
+    return "neutral"
 
-Respond with ONLY one of these (lowercase): happy, sad, mad, confused, surprised, neutral
-
-NPC response: "{response_text}"
-
-Emotion:"""
-
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=20,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    emotion = response.content[0].text.strip().lower().strip('"\'.,;:')
-    valid_emotions = {"happy", "sad", "mad", "confused", "surprised", "neutral"}
-    return emotion if emotion in valid_emotions else "neutral"
+FAREWELL_MARKERS = {
+    'hawker_centre': ['come again', 'here you go', 'enjoy', 'bye', 'see you', 'food ready', 'take care', 'next customer'],
+    'queue_shop':    ['go ahead', 'sorry', 'fine lah', 'whatever', 'okay lah', 'alright'],
+    'group_project': ['good luck', 'see you', 'bye', 'done', 'submit', 'see you in class'],
+    'home_family':   ['enjoy', 'eat already', 'done', 'ready', 'here you go', 'finished'],
+}
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
@@ -364,7 +518,7 @@ async def health():
 
 @app.post("/dialogue", response_model=DialogueResponse)
 async def dialogue(req: DialogueRequest):
-    if not req.message.strip():
+    if not req.message.strip() and not req.npc_initiated:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     system_prompt = build_system_prompt(
@@ -381,30 +535,146 @@ async def dialogue(req: DialogueRequest):
         custom_npc_prompt=req.custom_npc_prompt,
         npc_personality=req.npc_personality,
         support_level=req.support_level,
+        available_icons=req.available_icons,
+        turn_index=req.turn_index,
+        npc_initiated=req.npc_initiated or False,
+        active_event=req.active_event,
     )
 
     messages = []
     for msg in (req.history or []):
         messages.append({"role": msg.role, "content": msg.content})
-    messages.append({"role": "user", "content": req.message})
+    # For NPC-initiated turns the learner hasn't spoken; use a silent placeholder
+    user_content = req.message.strip() if req.message.strip() else "[silence — learner has not responded]"
+    messages.append({"role": "user", "content": user_content})
 
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=256,
-        system=system_prompt,
-        messages=messages,
-    )
+    try:
+        async with _claude_sem:
+            response = await async_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=256,
+                system=system_prompt,
+                messages=messages,
+            )
+    except anthropic.RateLimitError:
+        raise HTTPException(status_code=429, detail="Anthropic rate limit reached — retry after 60s")
 
     reply = response.content[0].text
-    audio_base64 = text_to_speech_base64(reply, req.scenario_id or "hawker_centre")
-    npc_emotion = detect_npc_emotion(reply)
+    audio_base64, npc_emotion = await asyncio.gather(
+        text_to_speech_async(reply, req.scenario_id or "hawker_centre"),
+        asyncio.to_thread(detect_npc_emotion, reply),
+    )
+
+    markers = FAREWELL_MARKERS.get(req.scenario_id or 'hawker_centre', [])
+    session_complete = (req.turn_index or 0) >= 6 and any(m in reply.lower() for m in markers)
+
     print(
-        f"[dialogue] TURN  history_len={len(req.history or [])}\n"
+        f"[dialogue] TURN  history_len={len(req.history or [])}  turn_index={req.turn_index}\n"
         f"  learner → \"{req.message[:80]}{'…' if len(req.message) > 80 else ''}\"\n"
         f"  NPC    ← \"{reply[:120]}{'…' if len(reply) > 120 else ''}\"  (emotion={npc_emotion})"
         + (f"\n  TTS={'ok' if audio_base64 else 'skipped'}")
+        + (f"  session_complete=YES" if session_complete else "")
     )
-    return DialogueResponse(response=reply, audio_base64=audio_base64, npc_emotion=npc_emotion)
+    return DialogueResponse(
+        response=reply,
+        audio_base64=audio_base64,
+        npc_emotion=npc_emotion,
+        session_complete=session_complete,
+    )
+
+
+@app.post("/dialogue/stream")
+async def dialogue_stream(req: DialogueRequest):
+    """SSE endpoint: streams NPC text as it generates, then fires concurrent TTS per sentence."""
+    if not req.message.strip() and not req.npc_initiated:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    system_prompt = build_system_prompt(
+        req.scenario_id or "hawker_centre",
+        req.mode or "learning",
+        req.persona or "zippy_sotong",
+        req.mood_modifier,
+        emotion=req.emotion,
+        competence_operational=req.competence_operational,
+        competence_linguistic=req.competence_linguistic,
+        competence_social=req.competence_social,
+        competence_strategic=req.competence_strategic,
+        competence_confidence=req.competence_confidence,
+        custom_npc_prompt=req.custom_npc_prompt,
+        npc_personality=req.npc_personality,
+        support_level=req.support_level,
+        available_icons=req.available_icons,
+        turn_index=req.turn_index,
+        npc_initiated=req.npc_initiated or False,
+        active_event=req.active_event,
+    )
+
+    messages = []
+    for msg in (req.history or []):
+        messages.append({"role": msg.role, "content": msg.content})
+    user_content = req.message.strip() if req.message.strip() else "[silence — learner has not responded]"
+    messages.append({"role": "user", "content": user_content})
+
+    scenario_id = req.scenario_id or "hawker_centre"
+
+    async def generate():
+        full_text = ""
+        sentence_buffer = ""
+        tts_tasks: list[asyncio.Task] = []
+        tts_results: dict[int, Optional[str]] = {}
+        sentence_count = 0
+
+        async def run_tts(text: str, idx: int) -> None:
+            tts_results[idx] = await text_to_speech_async(text, scenario_id)
+
+        try:
+            async with _claude_sem, async_client.messages.stream(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=256,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                async for delta in stream.text_stream:
+                    full_text += delta
+                    sentence_buffer += delta
+                    yield f"event: text\ndata: {json.dumps({'chunk': delta})}\n\n"
+
+                    if _is_sentence_end(sentence_buffer):
+                        sentence = sentence_buffer.strip()
+                        sentence_buffer = ""
+                        tts_tasks.append(asyncio.create_task(run_tts(sentence, sentence_count)))
+                        sentence_count += 1
+        except anthropic.RateLimitError:
+            yield "event: error\ndata: {\"error\": \"rate_limit\", \"message\": \"Anthropic rate limit reached — retry after 60s\"}\n\n"
+            return
+
+        # Handle any remaining text that didn't end with punctuation
+        if sentence_buffer.strip():
+            tts_tasks.append(asyncio.create_task(run_tts(sentence_buffer.strip(), sentence_count)))
+            sentence_count += 1
+
+        # Wait for all concurrent TTS calls to finish
+        if tts_tasks:
+            await asyncio.gather(*tts_tasks, return_exceptions=True)
+
+        # Yield audio chunks in sentence order
+        for i in range(sentence_count):
+            audio = tts_results.get(i)
+            if audio:
+                yield f"event: audio\ndata: {json.dumps({'index': i, 'audio_base64': audio})}\n\n"
+
+        # Detect emotion and session completion
+        npc_emotion = await asyncio.to_thread(detect_npc_emotion, full_text)
+        markers = FAREWELL_MARKERS.get(scenario_id, [])
+        session_complete = (req.turn_index or 0) >= 6 and any(m in full_text.lower() for m in markers)
+
+        yield f"event: done\ndata: {json.dumps({'npc_emotion': npc_emotion, 'session_complete': session_complete, 'full_text': full_text})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/hint", response_model=HintResponse)
@@ -429,7 +699,7 @@ Example format: "Try 'want' + 'food', or 'stop' + 'wait'"
 IMPORTANT: Only suggest icons that appear in the AVAILABLE ICONS list above. Do NOT invent icons.
 Return ONLY the hint text, nothing else."""
 
-    response = client.messages.create(
+    response = await async_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=60,
         messages=[{"role": "user", "content": prompt}],
@@ -451,7 +721,7 @@ Learner responded with: "{req.learner_response}"
 Is the learner's response completely inappropriate or off-topic for this social context?
 Answer with ONLY "yes" or "no"."""
 
-    response = client.messages.create(
+    response = await async_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=5,
         messages=[{"role": "user", "content": prompt}],
@@ -503,7 +773,7 @@ Return ONLY valid JSON with this exact structure:
   "summary": "<1-2 sentence overall assessment>"
 }}"""
 
-    response = client.messages.create(
+    response = await async_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=400,
         messages=[{"role": "user", "content": prompt}],
@@ -567,7 +837,7 @@ Format your response as JSON:
 Example response:
 {{"emotion": "frustrated", "explanation": "Started neutral but gradually escalated to high anger, indicating growing frustration."}}"""
 
-    response = client.messages.create(
+    response = await async_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=150,
         messages=[{"role": "user", "content": prompt}],

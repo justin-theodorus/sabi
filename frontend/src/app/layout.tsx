@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Nunito } from 'next/font/google'
+import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar'
 import './globals.css'
 
 const nunito = Nunito({
@@ -28,7 +29,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className={`${nunito.variable} min-h-screen`}>{children}</body>
+      <body className={`${nunito.variable} min-h-screen`}>
+        <ServiceWorkerRegistrar />
+        {children}
+      </body>
     </html>
   )
 }

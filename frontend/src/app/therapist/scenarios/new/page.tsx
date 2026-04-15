@@ -28,6 +28,7 @@ export default function NewScenarioPage() {
     const slug = data.slug.trim() || data.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
 
     const { error } = await supabase.from('scenarios').insert({
+      base_scenario: data.base_scenario,
       name: data.name.trim(),
       description: data.description.trim() || null,
       slug,

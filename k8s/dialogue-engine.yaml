@@ -4,7 +4,8 @@ metadata:
   name: dialogue-engine
   namespace: sabi
 spec:
-  replicas: 2          # Stateless — 2 replicas for availability; Claude API is the real bottleneck
+  replicas: 2          # Min replicas; HPA scales up to 8 based on CPU
+  # dialogue-queue workers round-robin across pods via K8s ClusterIP service
   selector:
     matchLabels:
       app: dialogue-engine
@@ -70,3 +71,26 @@ spec:
   ports:
     - port: 8001
       targetPort: 8001
+---
+# HPA: scale dialogue-engine pods based on CPU utilization
+# Ideal metric would be BullMQ queue depth via KEDA, but CPU is a good proxy
+# since each active Claude call holds a Python asyncio coroutine + memory.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dialogue-engine-hpa
+  namespace: sabi
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dialogue-engine
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
