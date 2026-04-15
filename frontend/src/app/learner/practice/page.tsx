@@ -4,15 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { SCENARIO_LIST } from '@/lib/scenarios'
-import { LearnerHeader, LearnerBottomNav } from '@/components/LearnerNav'
+import { LearnerBottomNav } from '@/components/LearnerNav'
 
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
-
-const SCENE_META: Record<string, { emoji: string; bg: string }> = {
-  hawker_centre: { emoji: '🍜', bg: 'bg-[#FFF8E7]' },
-  group_project:  { emoji: '📚', bg: 'bg-[#E8F4F8]' },
-  queue_shop:     { emoji: '🛍️', bg: 'bg-[#EEF6EE]' },
-}
 
 interface SessionRecord {
   id: string
@@ -30,21 +24,18 @@ interface ScenarioStats {
   survival: number
   bestHearts: number | null
   lastPlayed: string | null
-  /** 0-100 rough completion score */
   pct: number
 }
 
 function computeStats(sessions: SessionRecord[], scenarioId: string): ScenarioStats {
   const mine = sessions.filter((s) => s.scenario_id === scenarioId && s.status === 'completed')
   if (mine.length === 0) return { total: 0, learning: 0, survival: 0, bestHearts: null, lastPlayed: null, pct: 0 }
-
   const learning  = mine.filter((s) => s.mode === 'learning').length
   const survival  = mine.filter((s) => s.mode === 'survival').length
   const hearts    = mine.filter((s) => s.mode === 'survival' && s.hearts_remaining !== null)
   const bestHearts = hearts.length ? Math.max(...hearts.map((s) => s.hearts_remaining!)) : null
   const sorted = [...mine].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
   const lastPlayed = sorted[0]?.started_at ?? null
-  // rough pct: cap at 100, each session adds ~20%
   const pct = Math.min(100, mine.length * 20)
   return { total: mine.length, learning, survival, bestHearts, lastPlayed, pct }
 }
@@ -58,20 +49,25 @@ function formatRelative(iso: string): string {
   return new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
 }
 
-export default function PracticeHubPage() {
-  const router   = useRouter()
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? 'var(--pink)' : '#E0E0E4'}>
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.54L12 21.35z" />
+    </svg>
+  )
+}
 
+const KNOWN_SCENARIOS = ['hawker_centre', 'group_project', 'queue_shop']
+
+export default function PracticeHubPage() {
+  const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
   const [authToken, setAuthToken]     = useState<string | null>(null)
-  const [userName, setUserName]       = useState('Learner')
   const [sessions, setSessions]       = useState<SessionRecord[]>([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push('/'); return }
-      const email = session.user.email ?? ''
-      const name  = email.split('@')[0]
-      setUserName(name.charAt(0).toUpperCase() + name.slice(1))
       setAuthToken(session.access_token)
       setAuthChecked(true)
     })
@@ -90,145 +86,124 @@ export default function PracticeHubPage() {
       sessionStorage.setItem('selectedScenario', scenarioId)
       sessionStorage.setItem('selectedMode', mode)
     }
-    router.push('/learner/session')
-  }
-
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.push('/')
+    router.push('/learner/mood')
   }
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-[#E8714A] text-xl font-bold">Loading…</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontFamily: 'var(--font)', color: 'var(--text-muted)', fontSize: '15px', fontWeight: 600 }}>
+        Loading…
       </div>
     )
   }
 
+  const scenariosToShow = SCENARIO_LIST.filter((s) => KNOWN_SCENARIOS.includes(s.id))
+
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <div className="px-5 md:px-8 pt-8">
-        <h1 className="text-2xl font-extrabold text-gray-900">Hi, {userName}!</h1>
-        <p className="text-gray-400 text-sm mt-1">Choose a scenario and mode.</p>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
+      <div style={{ maxWidth: '768px', margin: '0 auto', width: '100%', padding: '28px 24px 0' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>Practice</h1>
+        <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '4px' }}>Choose a scenario and mode.</p>
       </div>
 
-      <main className="flex-1 overflow-y-auto pb-28 px-5 md:px-8 space-y-6 pt-4">
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-h) + 32px)' }}>
+      <div style={{ maxWidth: '768px', margin: '0 auto', width: '100%', padding: '16px 24px 0' }}>
 
-          {/* Mode legend cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="bg-white rounded-3xl p-4 shadow-sm flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">📚</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-gray-900 font-bold text-sm">Learning Mode</p>
-                <p className="text-gray-400 text-xs mt-0.5">Hints available · No timer · Low pressure</p>
-              </div>
-              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-green-600 text-xs font-bold">✓</span>
-              </div>
+        {/* Mode info tiles */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+          {/* Learning tile */}
+          <div style={{ background: '#f0faf3', border: '1.5px solid var(--green)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#c8ecd4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="#1a6e35" strokeWidth="1.6" />
+                <path d="M7 8h10M7 12h10M7 16h6" stroke="#1a6e35" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
             </div>
-            <div className="bg-white rounded-3xl p-4 shadow-sm flex items-center gap-3">
-              <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">⚔️</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-gray-900 font-bold text-sm">Survival Mode</p>
-                <p className="text-gray-400 text-xs mt-0.5">5 lives · 30s timer · No hints</p>
-              </div>
-              <div className="flex gap-0.5">
-                {[1,2,3,4,5].map(i => <span key={i} className="text-xs">❤️</span>)}
-              </div>
+            <div>
+              <p style={{ fontSize: '18px', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.2px' }}>Learning</p>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Hints · No timer</p>
             </div>
           </div>
 
-          {/* Scenario cards with progress */}
-          <div>
-            <h2 className="text-gray-900 text-xl font-extrabold mb-3">Choose a Scenario</h2>
-            <div className="space-y-3">
-              {SCENARIO_LIST.filter((s) => SCENE_META[s.id]).map((scenario) => {
-                const meta  = SCENE_META[scenario.id]!
-                const stats = computeStats(sessions, scenario.id)
-
-                return (
-                  <div key={scenario.id} className="bg-white rounded-3xl shadow-sm overflow-hidden">
-                    {/* Scenario header with progress */}
-                    <div className={`${meta.bg} px-5 pt-4 pb-3`}>
-                      <div className="flex items-center gap-4 mb-3">
-                        <span className="text-4xl">{meta.emoji}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-gray-900 font-extrabold text-base">{scenario.title}</p>
-                          <p className="text-gray-500 text-xs mt-0.5">{scenario.description}</p>
-                        </div>
-                        {/* Session count badge */}
-                        {stats.total > 0 && (
-                          <div className="flex-shrink-0 text-right">
-                            <p className="text-gray-900 font-extrabold text-base">{stats.total}</p>
-                            <p className="text-gray-400 text-[10px]">session{stats.total !== 1 ? 's' : ''}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Progress bar */}
-                      {stats.total > 0 ? (
-                        <div>
-                          <div className="flex justify-between text-[10px] text-gray-400 font-semibold mb-1">
-                            <span className="flex gap-2">
-                              {stats.learning > 0 && <span>📚 {stats.learning} learning</span>}
-                              {stats.survival > 0 && <span>⚔️ {stats.survival} survival</span>}
-                            </span>
-                            {stats.lastPlayed && <span>Last: {formatRelative(stats.lastPlayed)}</span>}
-                          </div>
-                          <div className="h-2 bg-white/60 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-[#E8714A] rounded-full transition-all duration-700"
-                              style={{ width: `${stats.pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-gray-400 text-xs">No sessions yet — start below!</p>
-                      )}
-                    </div>
-
-                    {/* Mode buttons */}
-                    <div className="flex gap-3 px-5 py-4">
-                      <button
-                        onClick={() => startSession(scenario.id, 'learning')}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-50 hover:bg-green-100 border-2 border-green-200 hover:border-green-400 text-green-700 font-bold text-sm transition-all active:scale-95"
-                      >
-                        <span>📚</span>
-                        Learning
-                      </button>
-                      <button
-                        onClick={() => startSession(scenario.id, 'survival')}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 border-2 border-rose-200 hover:border-rose-400 text-rose-600 font-bold text-sm transition-all active:scale-95"
-                      >
-                        <span>⚔️</span>
-                        Survival
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-
-              {/* Coming soon */}
-              <div className="bg-white rounded-3xl shadow-sm overflow-hidden opacity-50">
-                <div className="bg-[#F5EEFF] px-5 py-4 flex items-center gap-4">
-                  <span className="text-4xl">🎪</span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-gray-900 font-extrabold text-base">Playground</p>
-                      <span className="text-[10px] font-bold px-2 py-0.5 bg-gray-400 text-white rounded-full">SOON</span>
-                    </div>
-                    <p className="text-gray-500 text-xs mt-0.5">Play with friends</p>
-                  </div>
-                </div>
-                <div className="flex gap-3 px-5 py-4">
-                  <div className="flex-1 py-3 rounded-2xl bg-gray-50 border-2 border-gray-200 text-center text-gray-400 font-bold text-sm cursor-not-allowed">📚 Learning</div>
-                  <div className="flex-1 py-3 rounded-2xl bg-gray-50 border-2 border-gray-200 text-center text-gray-400 font-bold text-sm cursor-not-allowed">⚔️ Survival</div>
-                </div>
+          {/* Survival tile */}
+          <div style={{ background: '#fff5f6', border: '1.5px solid var(--pink)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ffd6da', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L15 9h7L16.5 14l2 7L12 17l-6.5 4 2-7L2 9h7L12 2z" stroke="#c0394a" strokeWidth="1.5" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: '18px', fontWeight: 800, color: 'var(--pink)', letterSpacing: '-0.2px' }}>Survival</p>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>5 hearts · Timer</p>
+              <div style={{ display: 'flex', gap: '3px', marginTop: '6px' }}>
+                {Array.from({ length: 5 }).map((_, i) => <HeartIcon key={i} filled />)}
               </div>
             </div>
           </div>
+        </div>
 
+        {/* Scenario cards */}
+        <h2 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '16px' }}>Choose a Scenario</h2>
+
+        <div>
+          {scenariosToShow.map((scenario) => {
+            const stats = computeStats(sessions, scenario.id)
+            return (
+              <div key={scenario.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', marginBottom: '12px' }}>
+                <p style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)' }}>{scenario.title}</p>
+                <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '4px' }}>{scenario.description}</p>
+                <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {stats.total > 0
+                    ? `${stats.total} session${stats.total !== 1 ? 's' : ''}${stats.lastPlayed ? ` · Last: ${formatRelative(stats.lastPlayed)}` : ''}`
+                    : 'No sessions yet'}
+                </p>
+
+                {/* Progress bar */}
+                <div style={{ height: '6px', background: 'var(--surface-sub)', borderRadius: '99px', margin: '12px 0', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--green)', borderRadius: '99px', width: `${stats.pct}%`, transition: 'width 0.7s' }} />
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button onClick={() => startSession(scenario.id, 'learning')}
+                    style={{ flex: 1, height: '48px', borderRadius: '12px', background: '#e6f4ea', color: '#1a6e35', border: '1px solid #a8d5b5', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="#1a6e35" strokeWidth="1.4" />
+                      <path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h4" stroke="#1a6e35" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
+                    Learning
+                  </button>
+                  <button onClick={() => startSession(scenario.id, 'survival')}
+                    style={{ flex: 1, height: '48px', borderRadius: '12px', background: '#ffeef1', color: '#c0394a', border: '1px solid #ffb3bd', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1.5L9.8 6H14.5l-3.8 2.8 1.5 4.5L8 10.5l-4.2 2.8 1.5-4.5L1.5 6H6.2L8 1.5z" stroke="#c0394a" strokeWidth="1.3" strokeLinejoin="round" />
+                    </svg>
+                    Survival
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Coming soon */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', opacity: 0.45 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <p style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>Playground</p>
+              <span className="badge-neutral">Coming Soon</span>
+            </div>
+            <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Play with friends</p>
+            <div style={{ height: '6px', background: 'var(--surface-sub)', borderRadius: '99px', margin: '12px 0' }} />
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1, height: '48px', borderRadius: '12px', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
+                Learning
+              </div>
+              <div style={{ flex: 1, height: '48px', borderRadius: '12px', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
+                Survival
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       </main>
 
       <LearnerBottomNav />

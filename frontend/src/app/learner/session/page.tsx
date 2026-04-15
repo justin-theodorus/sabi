@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { sendDialogue, judgeResponse, type Message } from '@/lib/dialogue'
@@ -12,12 +11,9 @@ import { uploadSessionVideo } from '@/lib/minio-upload'
 import { SCENARIOS } from '@/lib/scenarios'
 import { useWebcam } from '@/hooks/useWebcam'
 import { useEmotionCapture } from '@/hooks/useEmotionCapture'
-import Image from 'next/image'
-import livesImg from '@/assets/Lives.png'
 import ScenarioStage from '@/components/ScenarioStage'
+import SpeechBubble from '@/components/SpeechBubble'
 import AACBoard, { type AACIcon } from '@/components/AACBoard'
-import MessageBar from '@/components/MessageBar'
-import HeartsBar from '@/components/HeartsBar'
 import SabiHintBar from '@/components/SabiHintBar'
 
 const SURVIVAL_TIMEOUT_SEC = 30
@@ -25,16 +21,6 @@ const MAX_HEARTS = 5
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
 type Phase = 'lobby' | 'in_session'
-
-interface PastSession {
-  id: string
-  mode: string
-  started_at: string
-  ended_at: string | null
-  duration_seconds: number | null
-  hearts_remaining: number | null
-  status: string
-}
 
 function getInitialMode(): 'learning' | 'survival' {
   if (typeof window === 'undefined') return 'learning'
@@ -72,16 +58,6 @@ function buildMoodModifier(): string | null {
   } catch { return null }
 }
 
-function formatDuration(sec: number | null) {
-  if (!sec) return null
-  const m = Math.floor(sec / 60), s = sec % 60
-  return `${m}m ${s}s`
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
 /** Circular countdown ring */
 function CountdownRing({ timeLeft, total }: { timeLeft: number; total: number }) {
   const radius = 20
@@ -90,14 +66,14 @@ function CountdownRing({ timeLeft, total }: { timeLeft: number; total: number })
   const offset = circumference * (1 - fraction)
   const color = fraction > 0.5 ? '#22c55e' : fraction > 0.25 ? '#f59e0b' : '#ef4444'
   return (
-    <div className="relative w-12 h-12 flex-shrink-0">
-      <svg width="48" height="48" viewBox="0 0 48 48" className="-rotate-90">
-        <circle cx="24" cy="24" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="4" />
+    <div style={{ position: 'relative', width: '48px', height: '48px', flexShrink: 0 }}>
+      <svg width="48" height="48" viewBox="0 0 48 48" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="24" cy="24" r={radius} fill="none" stroke="rgba(255,255,255,.2)" strokeWidth="4" />
         <circle cx="24" cy="24" r={radius} fill="none" stroke={color} strokeWidth="4"
           strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
           style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s ease' }} />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-sm font-extrabold" style={{ color }}>
+      <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 800, color }}>
         {timeLeft}
       </span>
     </div>
@@ -105,163 +81,85 @@ function CountdownRing({ timeLeft, total }: { timeLeft: number; total: number })
 }
 
 // ─────────────────────────────────────────────────────────────
-// Lobby screen
+// Lobby screen (Fix 3/8: no blobs, no history, clean design)
 // ─────────────────────────────────────────────────────────────
 function LobbyScreen({
   scenario,
   mode,
-  pastSessions,
-  historyLoading,
   onStart,
   onBack,
 }: {
   scenario: ReturnType<typeof getInitialScenario>
   mode: 'learning' | 'survival'
-  pastSessions: PastSession[]
-  historyLoading: boolean
   onStart: () => void
   onBack: () => void
 }) {
   const isSurvival = mode === 'survival'
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      {/* Header */}
-      <header className="flex items-center gap-3 px-5 pt-6 pb-4">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-colors"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
+      {/* Back button — 32px circle */}
+      <div style={{ padding: '16px 24px 0' }}>
+        <button onClick={onBack}
+          style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-sub)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M10 3L5 8l5 5" stroke="var(--text-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span className="text-sm font-semibold">Home</span>
         </button>
-      </header>
+      </div>
 
-      <main className="flex-1 overflow-y-auto px-5 md:px-8 max-w-xl mx-auto w-full pb-8 space-y-5">
-        {/* Scenario + mode card */}
-        <div className={`rounded-3xl p-6 shadow-sm relative overflow-hidden ${isSurvival ? 'bg-gray-900' : 'bg-white'}`}>
-          {/* Decorative blobs */}
-          <div className={`absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-1/2 translate-x-1/2 ${isSurvival ? 'bg-rose-900/30' : 'bg-[#FDE8DC]'}`} />
-          <div className={`absolute bottom-0 left-8 w-20 h-20 rounded-full translate-y-1/2 ${isSurvival ? 'bg-rose-900/20' : 'bg-[#FFF8E7]'}`} />
-
-          <div className="relative">
-            <div className="text-5xl mb-3">
-              {scenario.id === 'hawker_centre' ? '🍜' : scenario.id === 'group_project' ? '📚' : '🛍️'}
-            </div>
-            <h1 className={`text-2xl font-extrabold mb-1 ${isSurvival ? 'text-white' : 'text-gray-900'}`}>
-              {scenario.title}
-            </h1>
-            <p className={`text-sm mb-4 ${isSurvival ? 'text-gray-400' : 'text-gray-500'}`}>
-              {scenario.description}
-            </p>
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${
-              isSurvival
-                ? 'bg-rose-900/60 text-rose-300 border border-rose-700/50'
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}>
-              <span>{isSurvival ? '⚔️' : '📚'}</span>
-              {isSurvival ? 'Survival Mode — 5 lives · 30s timer · No hints' : 'Learning Mode — Hints available · No pressure'}
-            </div>
-          </div>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '24px', maxWidth: '480px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Scene title + description */}
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: '8px' }}>
+            {scenario.title}
+          </h1>
+          <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            {scenario.description}
+          </p>
         </div>
 
-        {/* NPC preview */}
-        <div className="bg-white rounded-3xl p-4 shadow-sm flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gray-100 overflow-hidden flex-shrink-0">
-            <img src={scenario.npc} alt={scenario.npcName} className="w-full h-full object-cover" />
+        {/* Mode badge */}
+        <div>
+          <span className={isSurvival ? 'badge-survival' : 'badge-learning'}>
+            {isSurvival ? 'Survival Mode — 5 hearts · 30s timer · No hints' : 'Learning Mode — Hints available · No pressure'}
+          </span>
+        </div>
+
+        {/* NPC preview card */}
+        <div style={{ background: 'var(--surface-sub)', borderRadius: '16px', padding: '16px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--border)', overflow: 'hidden', flexShrink: 0 }}>
+            <img src={scenario.npc} alt={scenario.npcName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-gray-500 text-xs font-semibold">You'll be talking to</p>
-            <p className="text-gray-900 font-bold">{scenario.npcName}</p>
-            <p className="text-gray-400 text-xs mt-0.5 line-clamp-2 italic">"{scenario.npcGreeting}"</p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', marginBottom: '2px' }}>You will be talking to</p>
+            <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>{scenario.npcName}</p>
+            <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.4 }}>
+              &ldquo;{scenario.npcGreeting}&rdquo;
+            </p>
           </div>
         </div>
 
         {/* Start button */}
-        <button
-          onClick={onStart}
-          className={`w-full py-4 rounded-3xl font-extrabold text-lg shadow-md transition-all active:scale-95 ${
-            isSurvival
-              ? 'bg-rose-500 hover:bg-rose-400 text-white'
-              : 'bg-[#E8714A] hover:bg-[#d4613c] text-white'
-          }`}
-        >
-          {isSurvival ? '⚔️ Start Survival' : '📚 Start Practice'}
+        <button onClick={onStart}
+          style={{ width: '100%', height: '56px', borderRadius: '16px', fontSize: '15px', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', background: isSurvival ? 'var(--pink)' : 'var(--green)', color: '#fff', transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          {isSurvival ? (
+            <>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M9 1.5L11 7h5.5l-4.5 3.5 1.7 5-4.2-3-4.2 3 1.7-5L1.5 7H7L9 1.5z" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" fill="rgba(255,255,255,.3)" />
+              </svg>
+              Start Survival
+            </>
+          ) : (
+            <>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="3" y="3" width="12" height="12" rx="1.5" stroke="#fff" strokeWidth="1.4" />
+                <path d="M5.5 6.5h7M5.5 9h7M5.5 11.5h4" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              Start Practice
+            </>
+          )}
         </button>
-
-        {/* Past sessions */}
-        <div>
-          <h2 className="text-gray-900 font-extrabold text-lg mb-3">Your History</h2>
-
-          {historyLoading && (
-            <div className="bg-white rounded-3xl p-6 shadow-sm text-center text-gray-400 text-sm">
-              Loading history…
-            </div>
-          )}
-
-          {!historyLoading && pastSessions.length === 0 && (
-            <div className="bg-white rounded-3xl p-6 shadow-sm text-center">
-              <p className="text-3xl mb-2">🌱</p>
-              <p className="text-gray-500 font-semibold text-sm">No sessions yet for this scenario.</p>
-              <p className="text-gray-300 text-xs mt-1">Start your first session above!</p>
-            </div>
-          )}
-
-          {!historyLoading && pastSessions.length > 0 && (
-            <div className="space-y-3">
-              {pastSessions.map((s) => (
-                <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-4">
-                  {/* Mode icon */}
-                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 ${
-                    s.mode === 'survival' ? 'bg-rose-50' : 'bg-green-50'
-                  }`}>
-                    {s.mode === 'survival' ? '⚔️' : '📚'}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        s.mode === 'survival' ? 'bg-rose-100 text-rose-600' : 'bg-green-100 text-green-700'
-                      }`}>
-                        {s.mode === 'survival' ? 'Survival' : 'Learning'}
-                      </span>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        s.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        {s.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <span className="text-gray-400 text-xs">{formatDate(s.started_at)}</span>
-                      {s.duration_seconds !== null && (
-                        <span className="text-gray-400 text-xs">⏱ {formatDuration(s.duration_seconds)}</span>
-                      )}
-                      {s.mode === 'survival' && s.hearts_remaining !== null && (
-                        <span className="flex gap-0.5 items-center">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Image key={i} src={livesImg} alt="" width={14} height={14}
-                              className={`object-contain ${i < s.hearts_remaining! ? '' : 'opacity-20 grayscale'}`} />
-                          ))}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {s.status === 'completed' && (
-                    <Link
-                      href={`/therapist/sessions/${s.id}`}
-                      className="text-xs font-bold text-[#E8714A] hover:underline flex-shrink-0"
-                    >
-                      Report →
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </main>
     </div>
   )
@@ -282,9 +180,8 @@ export default function PracticePage() {
   // Phase
   const [phase, setPhase] = useState<Phase>('lobby')
 
-  // Lobby history
-  const [pastSessions, setPastSessions] = useState<PastSession[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
+  // Board overlay (Fix 5)
+  const [boardOpen, setBoardOpen] = useState(false)
 
   // Session config
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -332,23 +229,6 @@ export default function PracticePage() {
       setAuthChecked(true)
     })
   }, [router])
-
-  // ── Fetch history once auth is ready ──────────────────────
-  useEffect(() => {
-    if (!authChecked || !authToken) return
-    setHistoryLoading(true)
-    fetch(`${SESSION_URL}/sessions`, { headers: { Authorization: `Bearer ${authToken}` } })
-      .then((r) => r.json())
-      .then((data: PastSession[]) => {
-        const filtered = (Array.isArray(data) ? data : [])
-          .filter((s) => s.status === 'completed' || s.status === 'in_progress')
-          .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
-          .slice(0, 10)
-        setPastSessions(filtered)
-      })
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false))
-  }, [authChecked, authToken])
 
   // ── Session init (only when phase transitions to in_session) ─
   useEffect(() => {
@@ -444,6 +324,7 @@ export default function PracticePage() {
     setSelectedIcons([])
     setNpcResponse(null)
     setSessionId(null)
+    setBoardOpen(false)
     setPhase('in_session')
   }
 
@@ -460,21 +341,7 @@ export default function PracticePage() {
     setSelectedIcons([])
     setNpcResponse(null)
     setSessionId(null)
-    // Refresh history
-    if (authToken) {
-      setHistoryLoading(true)
-      fetch(`${SESSION_URL}/sessions`, { headers: { Authorization: `Bearer ${authToken}` } })
-        .then((r) => r.json())
-        .then((data: PastSession[]) => {
-          const filtered = (Array.isArray(data) ? data : [])
-            .filter((s) => s.status === 'completed' || s.status === 'in_progress')
-            .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
-            .slice(0, 10)
-          setPastSessions(filtered)
-        })
-        .catch(() => {})
-        .finally(() => setHistoryLoading(false))
-    }
+    setBoardOpen(false)
     setPhase('lobby')
   }
 
@@ -487,6 +354,7 @@ export default function PracticePage() {
   async function handleSubmit() {
     if (selectedIcons.length === 0 || npcLoading || sessionOver) return
     clearSurvivalTimer()
+    setBoardOpen(false)
 
     const iconsUsed = [...selectedIcons]
     iconCountSamplesRef.current.push(iconsUsed.length)
@@ -540,8 +408,8 @@ export default function PracticePage() {
   // ── Render ────────────────────────────────────────────────
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F5EFE8]">
-        <div className="text-[#E8714A] text-xl font-bold">Loading…</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontFamily: 'var(--font)', color: 'var(--text-muted)', fontSize: '15px', fontWeight: 600 }}>
+        Loading…
       </div>
     )
   }
@@ -552,8 +420,6 @@ export default function PracticePage() {
       <LobbyScreen
         scenario={scenario}
         mode={mode}
-        pastSessions={pastSessions}
-        historyLoading={historyLoading}
         onStart={handleStartSession}
         onBack={() => router.push('/learner/practice')}
       />
@@ -561,59 +427,66 @@ export default function PracticePage() {
   }
 
   const isSurvival = mode === 'survival'
-  const bgClass = isSurvival ? 'bg-gray-950' : 'bg-gray-100'
-  const headerClass = isSurvival ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
 
   // ── Session over ──────────────────────────────────────────
   if (sessionOver) {
     const won = hearts > 0
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center ${isSurvival ? 'bg-gray-950' : 'bg-[#F5EFE8]'} gap-6 px-6`}>
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px', padding: '24px', background: isSurvival ? '#0a0a0f' : 'var(--bg)', fontFamily: 'var(--font)' }}>
         {isSurvival ? (
-          <div className="text-center max-w-sm">
-            <div className="w-24 h-24 mx-auto mb-4 rounded-full flex items-center justify-center text-6xl"
-              style={{ background: won ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)' }}>
-              {won ? '🏆' : '💔'}
+          <div style={{ textAlign: 'center', maxWidth: '360px' }}>
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 16px', background: won ? 'rgba(47,176,90,.15)' : 'rgba(255,147,161,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {won ? (
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                  <rect x="13" y="28" width="14" height="4" rx="1.5" fill="#2FB05A" opacity=".8" />
+                  <rect x="16" y="32" width="8" height="3" rx="1" fill="#2FB05A" opacity=".6" />
+                  <path d="M10 8h20v10a10 10 0 01-20 0V8z" fill="#2FB05A" opacity=".8" />
+                  <path d="M10 11H6a4 4 0 004 4" stroke="#2FB05A" strokeWidth="2.5" strokeLinecap="round" />
+                  <path d="M30 11h4a4 4 0 01-4 4" stroke="#2FB05A" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                  <path d="M20 34l-1.8-1.65C10 24.6 6 21.2 6 16.5 6 12.9 8.9 10 12.5 10c2.17 0 4.26 1.01 5.5 2.59L20 14l2-1.41C23.24 11.01 25.33 10 27.5 10 31.1 10 34 12.9 34 16.5c0 4.7-4 8.1-12.2 15.85L20 34z" fill="var(--pink)" opacity=".3" />
+                  <path d="M17 14l-2.5 6h5l-2.5 6" stroke="var(--pink)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </div>
-            <h2 className={`text-3xl font-extrabold mb-2 ${won ? 'text-green-400' : 'text-rose-400'}`}>
+            <h2 style={{ fontSize: '28px', fontWeight: 800, letterSpacing: '-0.3px', marginBottom: '8px', color: won ? '#2FB05A' : 'var(--pink)' }}>
               {won ? 'You Survived!' : 'Game Over'}
             </h2>
-            <p className="text-gray-400 text-sm mb-6">
+            <p style={{ fontSize: '14px', color: '#888', marginBottom: '24px', lineHeight: 1.5 }}>
               {won
                 ? `You completed ${scenario.title} with ${hearts} life${hearts !== 1 ? 's' : ''} remaining.`
-                : `You ran out of lives. Keep practising!`}
+                : 'You ran out of lives. Keep practising!'}
             </p>
-            <div className="flex items-center justify-center gap-2 mb-8 p-4 bg-gray-900 rounded-2xl">
-              <span className="text-gray-400 text-sm font-semibold">Lives left:</span>
-              <div className="flex gap-1">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '32px', padding: '16px', background: 'rgba(255,255,255,.06)', borderRadius: '16px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: '#888' }}>Lives left:</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 {Array.from({ length: MAX_HEARTS }).map((_, i) => (
-                  <div key={i} className={i < hearts ? 'opacity-100' : 'opacity-20 grayscale'}>
-                    <Image src={livesImg} alt="life" width={28} height={28} className="object-contain" />
-                  </div>
+                  <svg key={i} width="24" height="24" viewBox="0 0 24 24" fill={i < hearts ? 'var(--pink)' : 'rgba(255,255,255,.15)'}>
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.54L12 21.35z" />
+                  </svg>
                 ))}
               </div>
             </div>
-            <div className="flex gap-3 justify-center">
-              <button onClick={handleBackToLobby} className="px-6 py-3 bg-[#E8714A] hover:bg-[#d4613c] text-white rounded-2xl font-bold transition-colors">
-                Back to Lobby
-              </button>
-              <button onClick={handleStartSession} className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-2xl font-bold transition-colors">
-                Try Again
-              </button>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={handleBackToLobby} style={{ padding: '12px 24px', background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font)' }}>Back</button>
+              <button onClick={handleStartSession} style={{ padding: '12px 24px', background: 'var(--pink)', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font)' }}>Try Again</button>
             </div>
           </div>
         ) : (
-          <div className="text-center max-w-sm">
-            <div className="text-5xl mb-4">🎉</div>
-            <h2 className="text-gray-900 text-2xl font-bold mb-2">Session Complete!</h2>
-            <p className="text-gray-500 text-sm mb-6">Great job! You completed the {scenario.title} scenario.</p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={handleBackToLobby} className="px-6 py-3 bg-[#E8714A] hover:bg-[#d4613c] text-white rounded-2xl font-bold transition-colors">
-                Back to Lobby
-              </button>
-              <button onClick={handleSignOut} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold transition-colors">
-                Sign Out
-              </button>
+          <div style={{ textAlign: 'center', maxWidth: '360px' }}>
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 16px', background: 'rgba(47,176,90,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <circle cx="20" cy="20" r="16" stroke="#2FB05A" strokeWidth="2.5" />
+                <path d="M13 20l5 5 9-9" stroke="#2FB05A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <h2 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', marginBottom: '8px' }}>Session Complete!</h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Great job! You completed the {scenario.title} scenario.</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={handleBackToLobby} style={{ padding: '12px 24px', background: 'var(--green)', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font)' }}>Back</button>
+              <button onClick={handleSignOut} style={{ padding: '12px 24px', background: 'var(--surface-sub)', border: 'none', borderRadius: '12px', color: 'var(--text-primary)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font)' }}>Sign Out</button>
             </div>
           </div>
         )}
@@ -621,88 +494,202 @@ export default function PracticePage() {
     )
   }
 
-  // ── Active session ────────────────────────────────────────
+  // ── Active session — full-screen scenario + AAC overlay (Fix 5) ──────────
   return (
-    <div className={`h-screen w-screen ${bgClass} flex flex-col overflow-hidden`}>
-      <header className={`flex items-center justify-between px-4 py-2 border-b ${headerClass} flex-shrink-0`}>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleBackToLobby}
-            className={`flex items-center gap-1.5 transition-colors ${isSurvival ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            <span className="text-sm font-medium">Lobby</span>
-          </button>
-          <div className={`w-px h-5 ${isSurvival ? 'bg-gray-700' : 'bg-gray-200'}`} />
-          <div>
-            <h1 className={`font-semibold text-sm ${isSurvival ? 'text-white' : 'text-gray-900'}`}>{scenario.title}</h1>
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${isSurvival ? 'bg-rose-500 animate-pulse' : 'bg-green-400'}`} />
-              <p className={`text-xs font-medium ${isSurvival ? 'text-rose-400' : 'text-green-500'}`}>
-                {isSurvival ? 'Survival Mode' : 'Learning Mode'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {isSurvival && <><CountdownRing timeLeft={timeLeft} total={SURVIVAL_TIMEOUT_SEC} /><HeartsBar hearts={hearts} /></>}
-          <button onClick={() => endSessionFlow(hearts)} className={`px-3 py-1 text-sm rounded-lg transition-colors font-medium ${isSurvival ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-            End Session
-          </button>
-          <button onClick={handleSignOut} className={`text-sm transition-colors ${isSurvival ? 'text-gray-500 hover:text-gray-300' : 'text-gray-500 hover:text-gray-900'}`}>
-            Sign out
+    <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#111', fontFamily: 'var(--font)' }}>
+
+      {/* Full-screen scenario stage */}
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <ScenarioStage backgroundSrc={scenario.background} npcSrc={scenario.npc} npcEmotion={npcEmotion} />
+      </div>
+
+      {/* Hidden camera elements — keep running for emotion capture & recording */}
+      <video ref={videoRef} muted playsInline style={{ display: 'none' }} />
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+      {/* Header overlay — 3-col grid: title | mode badge | actions */}
+      <header style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+        padding: '10px 16px', gap: '8px',
+        background: isSurvival ? 'rgba(0,0,0,.72)' : 'rgba(255,255,255,.92)',
+        backdropFilter: 'blur(8px)',
+        borderBottom: `1px solid ${isSurvival ? 'rgba(255,255,255,.1)' : 'var(--border)'}`,
+        minHeight: '52px',
+      }}>
+        {/* Left: scene title */}
+        <p style={{ fontSize: '15px', fontWeight: 700, color: isSurvival ? '#fff' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+          {scenario.title}
+        </p>
+
+        {/* Center: mode badge */}
+        <span className={isSurvival ? 'badge-survival' : 'badge-learning'} style={{ whiteSpace: 'nowrap' }}>
+          {isSurvival ? 'Survival' : 'Learning'}
+        </span>
+
+        {/* Right: hearts (survival) + countdown + end */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+          {isSurvival && (
+            <>
+              <div style={{ display: 'flex', gap: '3px' }}>
+                {Array.from({ length: MAX_HEARTS }).map((_, i) => (
+                  <svg key={i} width="16" height="16" viewBox="0 0 24 24" fill={i < hearts ? 'var(--pink)' : isSurvival ? 'rgba(255,255,255,.2)' : '#E0E0E4'}>
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.54L12 21.35z" />
+                  </svg>
+                ))}
+              </div>
+              <CountdownRing timeLeft={timeLeft} total={SURVIVAL_TIMEOUT_SEC} />
+            </>
+          )}
+          <button onClick={() => endSessionFlow(hearts)}
+            style={{ height: '32px', padding: '0 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, background: isSurvival ? 'rgba(255,255,255,.15)' : 'var(--surface-sub)', color: isSurvival ? '#fff' : 'var(--text-primary)', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', flexShrink: 0 }}>
+            End
           </button>
         </div>
       </header>
 
-      {isSurvival && timeLeft <= 10 && !npcLoading && (
-        <div className="flex-shrink-0 bg-rose-900/60 border-b border-rose-700/50 px-4 py-1.5 flex items-center justify-center">
-          <span className="text-rose-300 text-xs font-bold animate-pulse">⚠️ Hurry! Only {timeLeft}s left!</span>
+      {/* SABI Hint bar — learning mode, fixed below header, above scene */}
+      {mode === 'learning' && (
+        <div style={{ position: 'absolute', top: '52px', left: 0, right: 0, zIndex: 10 }}>
+          <SabiHintBar scenarioId={scenario.id} npcLastMessage={npcResponse} visible={!npcLoading && !!npcResponse} />
         </div>
       )}
 
-      <div className="flex-1 flex gap-3 p-3 overflow-hidden">
-        <div className="w-[45%] flex-shrink-0 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 relative">
-            <ScenarioStage npcResponse={npcResponse} npcLoading={npcLoading} backgroundSrc={scenario.background} npcSrc={scenario.npc} npcEmotion={npcEmotion} />
-            {/* Hidden camera elements — keep running for emotion capture & recording */}
-            <video ref={videoRef} muted playsInline className="hidden" />
-            <canvas ref={canvasRef} className="hidden" />
-
-            {/* Recording indicator */}
-            {webcamActive && (
-              <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm text-white text-[11px] font-semibold px-2.5 py-1 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                Recording
-              </div>
-            )}
-            {isSurvival && (
-              <div className="absolute bottom-3 left-3 z-10 flex gap-1">
-                {Array.from({ length: MAX_HEARTS }).map((_, i) => (
-                  <div key={i} className={`transition-all duration-300 drop-shadow-md ${i < hearts ? 'opacity-100' : 'opacity-20 grayscale'}`}>
-                    <Image src={livesImg} alt="life" width={28} height={28} className="object-contain" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {mode === 'learning' && (
-            <SabiHintBar scenarioId={scenario.id} npcLastMessage={npcResponse} visible={!npcLoading && !!npcResponse} />
-          )}
-        </div>
-        <div className="flex-1 flex flex-col gap-3 min-h-0">
-          <div className="flex-1 min-h-0">
-            <AACBoard onIconSelect={handleIconSelect} selectedIds={selectedIcons.map((i) => i.id)} />
-          </div>
-          <div className="flex-shrink-0">
-            <MessageBar selectedIcons={selectedIcons} onRemove={handleRemoveIcon} onClear={handleClear} onSubmit={handleSubmit} loading={npcLoading} />
-          </div>
-        </div>
+      {/* NPC Speech bubble — sits below hint bar */}
+      <div style={{ position: 'absolute', top: mode === 'learning' ? '104px' : '52px', left: 0, right: 0, zIndex: 10 }}>
+        <SpeechBubble text={npcResponse} loading={npcLoading} />
       </div>
 
-      <canvas ref={captureFrameRef} className="hidden" aria-hidden="true" />
+      {/* Survival urgency warning */}
+      {isSurvival && timeLeft <= 10 && !npcLoading && (
+        <div style={{ position: 'absolute', top: '52px', left: 0, right: 0, zIndex: 10, background: 'rgba(239,68,68,.85)', padding: '6px', textAlign: 'center' }}>
+          <span style={{ color: '#fff', fontSize: '12px', fontWeight: 700 }}>
+            Hurry! Only {timeLeft}s left!
+          </span>
+        </div>
+      )}
+
+      {/* Recording indicator */}
+      {webcamActive && (
+        <div style={{ position: 'absolute', top: '60px', right: '16px', zIndex: 11, display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)', color: '#fff', fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '99px' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} />
+          REC
+        </div>
+      )}
+
+      {/* AAC trigger — 64×64 image button, centered bottom */}
+      <button
+        onClick={() => { if (!npcLoading) setBoardOpen(true) }}
+        disabled={npcLoading}
+        aria-label="Open AAC board"
+        style={{
+          position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+          width: '64px', height: '64px', borderRadius: '18px',
+          border: 'none', cursor: npcLoading ? 'not-allowed' : 'pointer',
+          background: npcLoading ? 'rgba(0,0,0,.35)' : isSurvival ? 'var(--pink)' : 'var(--green)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'opacity 0.15s',
+          opacity: npcLoading ? 0.5 : 1,
+          boxShadow: '0 4px 20px rgba(0,0,0,.35)',
+          padding: 0,
+          overflow: 'hidden',
+        }}>
+        {npcLoading ? (
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <circle cx="14" cy="14" r="10" stroke="rgba(255,255,255,.4)" strokeWidth="2.5" />
+            <path d="M14 4a10 10 0 019.7 7.5" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 14 14" to="360 14 14" dur="1s" repeatCount="indefinite" />
+            </path>
+          </svg>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src="/assets/icons/aac-device.png"
+            alt="AAC"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '18px' }}
+            onError={(e) => {
+              const el = e.currentTarget as HTMLImageElement
+              el.style.display = 'none'
+              const fallback = el.nextSibling as HTMLElement
+              if (fallback) fallback.style.display = 'grid'
+            }}
+          />
+        )}
+        {/* 4×4 dot grid fallback */}
+        <div style={{ display: 'none', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', padding: '12px', position: 'absolute', inset: 0, alignItems: 'center', justifyItems: 'center' }}>
+          {Array.from({ length: 16 }).map((_, i) => (
+            <span key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'rgba(255,255,255,.9)' }} />
+          ))}
+        </div>
+      </button>
+
+      {/* ── AAC Board Overlay (Fix 5) ── */}
+      {boardOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.55)' }}
+          onClick={() => setBoardOpen(false)}
+        >
+          <div
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'var(--surface)', borderRadius: '20px 20px 0 0', maxHeight: '70vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close X button */}
+            <button
+              onClick={() => setBoardOpen(false)}
+              style={{ position: 'absolute', top: '12px', right: '12px', width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-sub)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M11 3L3 11M3 3l8 8" stroke="var(--text-primary)" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+
+            {/* Sentence bar: chips left, delete + confirm right */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 60px 12px 16px', borderBottom: '1px solid var(--border)', minHeight: '56px', flexShrink: 0 }}>
+              <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', minHeight: '32px' }}>
+                {selectedIcons.length === 0 ? (
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Select icons to build your message…</span>
+                ) : (
+                  selectedIcons.map((icon, i) => (
+                    <button key={`${icon.id}-${i}`} onClick={() => handleRemoveIcon(i)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--nav-active-bg)', border: 'none', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer', fontFamily: 'var(--font)', transition: 'background 0.12s' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/icons/${icon.category}/${icon.id}.png`} alt={icon.label} style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--nav-active-text)' }}>{icon.label}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                {/* Delete last */}
+                <button
+                  onClick={() => selectedIcons.length > 0 && handleRemoveIcon(selectedIcons.length - 1)}
+                  disabled={selectedIcons.length === 0}
+                  style={{ width: '40px', height: '40px', borderRadius: '10px', border: 'none', cursor: selectedIcons.length > 0 ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', background: selectedIcons.length > 0 ? '#ffeef1' : 'var(--surface-sub)', color: selectedIcons.length > 0 ? '#c0394a' : 'var(--text-muted)', transition: 'background 0.12s' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 5H9L2 12l7 7h11a2 2 0 002-2V7a2 2 0 00-2-2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                    <path d="M17 9l-5 6M12 9l5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {/* Confirm / Send */}
+                <button
+                  onClick={handleSubmit}
+                  disabled={selectedIcons.length === 0 || npcLoading}
+                  style={{ width: '40px', height: '40px', borderRadius: '10px', border: 'none', cursor: selectedIcons.length > 0 && !npcLoading ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', background: selectedIcons.length > 0 && !npcLoading ? 'var(--green)' : 'var(--surface-sub)', color: selectedIcons.length > 0 && !npcLoading ? '#fff' : 'var(--text-muted)', transition: 'background 0.12s' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* AACBoard — tile grid from component, renders API icons only */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <AACBoard onIconSelect={handleIconSelect} selectedIds={selectedIcons.map((i) => i.id)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <canvas ref={captureFrameRef} style={{ display: 'none' }} aria-hidden="true" />
     </div>
   )
 }

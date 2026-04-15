@@ -23,7 +23,7 @@ export const SCENARIOS: Record<string, ScenarioConfig> = {
     title: 'Hawker Centre',
     description: 'Order food at a local hawker stall',
     background: '/backgrounds/hawker-centre.jpg',
-    npc: '/npc/hawker-uncle.png',
+    npc: '/npc/uncle/neutral.png',
     npcName: 'Uncle Beng',
     npcGreeting: 'Hello! Welcome to my stall. What would you like today?',
     scenarioIcons: [

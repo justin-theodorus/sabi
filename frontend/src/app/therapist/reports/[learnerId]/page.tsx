@@ -6,29 +6,39 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { SCENARIOS } from '@/lib/scenarios'
 import { CommunicationRadar } from '@/components/CommunicationRadar'
-import { TherapistHeader, TherapistBottomNav } from '@/components/TherapistSidebar'
+import { TherapistBottomNav } from '@/components/TherapistSidebar'
 
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
-const PERSONA_INFO: Record<string, { label: string; emoji: string; bg: string; text: string; desc: string; focus: string }> = {
-  garang_crab:              { label: 'Garang Crab',   emoji: '🦀', bg: 'bg-rose-50',    text: 'text-rose-700',    desc: 'Confident communicator, high initiation, may rush responses.',   focus: 'Strategic competency.' },
-  shy_chick:                { label: 'Shy Chick',     emoji: '🐣', bg: 'bg-yellow-50',  text: 'text-yellow-700',  desc: 'Hesitant communicator, high latency, frequent re-prompts.',       focus: 'Confidence building.' },
-  zippy_sotong:             { label: 'Zippy Sotong',  emoji: '🦑', bg: 'bg-purple-50',  text: 'text-purple-700',  desc: 'Very energetic but lacks structure, rushes interactions.',         focus: 'Linguistic structure.' },
-  curious_monkey:           { label: 'Curious Monkey',emoji: '🐒', bg: 'bg-orange-50',  text: 'text-orange-700',  desc: 'Exploratory and playful, tries varied communication patterns.',    focus: 'Operational fluency.' },
-  steady_turtle:            { label: 'Steady Turtle', emoji: '🐢', bg: 'bg-green-50',   text: 'text-green-700',   desc: 'Reflective and calm, thoughtful moderate-pace engagement.',        focus: 'Social engagement.' },
-  guided_learner:           { label: 'Guided Learner',emoji: '🧭', bg: 'bg-blue-50',    text: 'text-blue-700',    desc: 'Thrives with hints and step-by-step support.',                     focus: 'Confidence building.' },
-  social_practice_learner:  { label: 'Social Learner',emoji: '🤝', bg: 'bg-purple-50',  text: 'text-purple-700',  desc: 'Loves interactive conversations and social practice.',             focus: 'Social competency.' },
-  independent_communicator: { label: 'Independent',   emoji: '🚀', bg: 'bg-emerald-50', text: 'text-emerald-700', desc: 'Works best independently, tackles challenges head-on.',            focus: 'Strategic competency.' },
+const PERSONA_INFO: Record<string, { label: string; desc: string; focus: string; badgeClass: string }> = {
+  garang_crab:              { label: 'Garang Crab',    badgeClass: 'badge-hard',         desc: 'Confident communicator, high initiation, may rush responses.',   focus: 'Strategic competency.' },
+  shy_chick:                { label: 'Shy Chick',      badgeClass: 'badge-intermediate', desc: 'Hesitant communicator, high latency, frequent re-prompts.',       focus: 'Confidence building.' },
+  zippy_sotong:             { label: 'Zippy Sotong',   badgeClass: 'badge-advanced',     desc: 'Very energetic but lacks structure, rushes interactions.',         focus: 'Linguistic structure.' },
+  curious_monkey:           { label: 'Curious Monkey', badgeClass: 'badge-intermediate', desc: 'Exploratory and playful, tries varied communication patterns.',    focus: 'Operational fluency.' },
+  steady_turtle:            { label: 'Steady Turtle',  badgeClass: 'badge-beginner',     desc: 'Reflective and calm, thoughtful moderate-pace engagement.',        focus: 'Social engagement.' },
+  guided_learner:           { label: 'Guided Learner', badgeClass: 'badge-beginner',     desc: 'Thrives with hints and step-by-step support.',                     focus: 'Confidence building.' },
+  social_practice_learner:  { label: 'Social Learner', badgeClass: 'badge-advanced',     desc: 'Loves interactive conversations and social practice.',             focus: 'Social competency.' },
+  independent_communicator: { label: 'Independent',    badgeClass: 'badge-beginner',     desc: 'Works best independently, tackles challenges head-on.',            focus: 'Strategic competency.' },
 }
 
-const SESSION_DOT_COLORS = ['#f87171', '#fbbf24', '#60a5fa', '#4ade80', '#c084fc', '#fb923c']
+function getDifficultyBadgeClass(mode: string) {
+  if (mode === 'survival') return 'badge-hard'
+  return 'badge-learning'
+}
 
-const COMPETENCE_COLORS: Record<string, string> = {
-  Operational: '#7ECFF5',
-  Linguistic:  '#4ade80',
-  Social:      '#FBBF24',
-  Strategic:   '#F87171',
-  Confidence:  '#C084FC',
+function getScenarioName(id: string) {
+  return SCENARIOS[id]?.title ?? id
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function formatDuration(s: number | null) {
+  if (!s) return '—'
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m}:${String(sec).padStart(2, '0')}`
 }
 
 interface LearnerDetail {
@@ -60,43 +70,19 @@ interface Session {
   } | null
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
-}
-
-function formatDuration(s: number | null) {
-  if (!s) return '—'
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
-function getScenarioName(id: string) {
-  return SCENARIOS[id]?.title ?? id
-}
-
-function getScenarioEmoji(id: string): string {
-  return ({ hawker_centre: '🍜', group_project: '📚', queue_shop: '🛍️' } as Record<string, string>)[id] ?? '🎭'
-}
-
 export default function LearnerReportPage() {
   const router = useRouter()
   const { learnerId } = useParams<{ learnerId: string }>()
 
-  const [therapistName, setTherapistName]   = useState('Therapist')
-  const [authToken, setAuthToken]           = useState<string | null>(null)
-  const [learner, setLearner]               = useState<LearnerDetail | null>(null)
-  const [loading, setLoading]               = useState(true)
-  const [summaryOpen, setSummaryOpen]       = useState(false)
+  const [authToken, setAuthToken]         = useState<string | null>(null)
+  const [learner, setLearner]             = useState<LearnerDetail | null>(null)
+  const [loading, setLoading]             = useState(true)
+  const [summaryOpen, setSummaryOpen]     = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push('/'); return }
-      const role = session.user.user_metadata?.role
-      if (role !== 'therapist') { router.push('/learner'); return }
-      const email = session.user.email ?? ''
-      const n = email.split('@')[0]
-      setTherapistName(n.charAt(0).toUpperCase() + n.slice(1))
+      if (session.user.user_metadata?.role !== 'therapist') { router.push('/learner'); return }
       setAuthToken(session.access_token)
     })
   }, [router])
@@ -106,19 +92,11 @@ export default function LearnerReportPage() {
     const res = await fetch(`${SESSION_URL}/learners/${learnerId}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     })
-    if (res.ok) {
-      const data: LearnerDetail = await res.json()
-      setLearner(data)
-    }
+    if (res.ok) setLearner(await res.json())
     setLoading(false)
   }, [authToken, learnerId])
 
   useEffect(() => { if (authToken) fetchData() }, [authToken, fetchData])
-
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
 
   const sessions  = learner?.sessions ?? []
   const scored    = sessions.filter((s) => s.status === 'completed' && s.competence_scores)
@@ -133,192 +111,228 @@ export default function LearnerReportPage() {
   ] : []
 
   const latestSummary = scored[0]?.competence_scores?.summary ?? null
-  const pi = PERSONA_INFO[learner?.persona ?? '']
-
-  const completed = sessions.filter(s => s.status === 'completed')
+  const pi            = PERSONA_INFO[learner?.persona ?? '']
+  const completed     = sessions.filter((s) => s.status === 'completed')
   const totalDuration = completed.reduce((a, s) => a + (s.duration_seconds ?? 0), 0)
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-[#E8714A] text-xl font-bold">Loading…</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <div style={{ color: 'var(--blue)', fontSize: '18px', fontWeight: 700 }}>Loading…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
 
       {/* Back breadcrumb */}
-      <div className="px-5 md:px-8 pt-4 py-3 flex items-center gap-2 border-b border-gray-100 bg-white">
+      <div style={{ padding: '16px 32px', display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
         <Link href="/therapist/reports"
-          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 text-sm font-semibold transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'color 0.15s' }}
+          className="hover:text-gray-800">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Patients
+          All patients
         </Link>
-        <div className="w-px h-4 bg-gray-200" />
-        <span className="text-gray-900 font-extrabold text-sm">Patient Dashboard</span>
+        <div style={{ width: '1px', height: '16px', background: 'var(--border)' }} />
+        <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)' }}>Patient dashboard</span>
       </div>
 
-      <main className="flex-1 overflow-y-auto pb-28 px-5 md:px-8 py-5 max-w-xl space-y-4">
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-h) + 32px)' }}>
+      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '24px 32px' }}>
 
-          {/* ── Learner header ── */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-[#FDE8DC] flex items-center justify-center text-[#E8714A] font-extrabold text-2xl flex-shrink-0">
-                {learner?.name[0] ?? '?'}
+        {/* ── Patient header ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '20px', borderBottom: '1px solid var(--border)', marginBottom: '24px' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
+            {learner?.name[0] ?? '?'}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+              {learner?.name ?? 'Unknown'}
+            </div>
+            {pi && <span className={pi.badgeClass}>{pi.label}</span>}
+          </div>
+          <button style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--surface-sub)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}
+            className="hover:bg-[#EAEAEF]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M11 2l3 3-8 8H3v-3l8-8z" stroke="#555" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Quick stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          {[
+            { label: 'Total sessions', value: sessions.length.toString() },
+            { label: 'Scored', value: scored.length.toString() },
+            { label: 'Total time', value: totalDuration > 0 ? `${Math.floor(totalDuration / 60)}m` : '—' },
+          ].map(({ label, value }) => (
+            <div key={label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: '2px' }}>{value}</div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Persona card ── */}
+        {pi && (
+          <div style={{ background: '#fff0f2', border: '1px solid #ffc8d0', borderRadius: '16px', padding: '16px 20px', display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '24px' }}>
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ flexShrink: 0 }}>
+              <circle cx="14" cy="14" r="12" fill="#ffeef1" stroke="#ffb3bd" strokeWidth="1.4" />
+              <path d="M9 14c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="#c0394a" strokeWidth="1.6" strokeLinecap="round" />
+              <circle cx="14" cy="16" r="2" fill="#c0394a" />
+            </svg>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#c0394a', marginBottom: '4px' }}>{pi.label}</div>
+              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {pi.desc} Focus area: <strong>{pi.focus}</strong>
               </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-extrabold text-gray-900">{learner?.name ?? 'Unknown'}</h2>
-                {pi && (
-                  <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full mt-1 ${pi.bg} ${pi.text}`}>
-                    {pi.emoji} {pi.label}
-                  </span>
-                )}
+              {learner?.persona_confidence != null && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Confidence: {Math.round(learner.persona_confidence * 100)}%
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── All sessions + Full report — side by side cards ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+          {/* All sessions card */}
+          <Link href={`/therapist/sessions?learner=${learnerId}`}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', cursor: 'pointer', textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: '12px', transition: 'transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s', minHeight: '140px' }}
+            className="hover:-translate-y-1 hover:shadow-card-md">
+            <div style={{ width: '40px', height: '40px', background: 'var(--surface-sub)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2" width="14" height="14" rx="2.5" stroke="#555" strokeWidth="1.4" />
+                <path d="M5.5 6.5h7M5.5 9h7M5.5 11.5h5" stroke="#555" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>All sessions</div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                {sessions.length} session{sessions.length !== 1 ? 's' : ''} recorded
               </div>
-              <Link href="/therapist/learners"
-                className="flex items-center gap-1 px-3 py-1.5 bg-[#FDE8DC] text-[#E8714A] text-xs font-bold rounded-xl hover:bg-[#f9d5c0] transition-colors flex-shrink-0">
-                Practice Set
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 18l6-6-6-6" />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 600, color: 'var(--blue)' }}>
+              View all
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </Link>
+
+          {/* Full report card */}
+          <div
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: '140px' }}>
+            <div style={{ width: '40px', height: '40px', background: 'var(--surface-sub)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="2" y="2" width="10" height="14" rx="2" stroke="#555" strokeWidth="1.4" />
+                <path d="M5 6h5M5 9h4" stroke="#555" strokeWidth="1.3" strokeLinecap="round" />
+                <path d="M10 13l2 2 4-4" stroke="#34A853" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>Full report</div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                {scored.length > 0 ? `${scored.length} scored session${scored.length !== 1 ? 's' : ''}` : 'No scored sessions yet'}
+              </div>
+            </div>
+            {scored.length > 0 && (
+              <Link href={`/therapist/sessions/${scored[0].id}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 600, color: 'var(--blue)', textDecoration: 'none' }}>
+                Latest report
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </Link>
-            </div>
-
-            {/* Quick stats */}
-            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-50">
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-gray-900">{sessions.length}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Total Sessions</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-gray-900">{scored.length}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Scored</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-gray-900">
-                  {totalDuration > 0 ? `${Math.floor(totalDuration / 60)}m` : '—'}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">Total Time</p>
-              </div>
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* ── Persona card ── */}
-          {pi && (
-            <div className={`${pi.bg} rounded-2xl p-4 flex items-start gap-3`}>
-              <span className="text-2xl flex-shrink-0">{pi.emoji}</span>
-              <div>
-                <p className={`font-bold text-sm ${pi.text}`}>{pi.label}</p>
-                <p className="text-xs text-gray-600 mt-0.5">{pi.desc}</p>
-                <p className="text-xs text-gray-500 mt-0.5">Focus area: <span className="font-semibold">{pi.focus}</span></p>
-                {learner?.persona_confidence != null && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    Confidence: {Math.round(learner.persona_confidence * 100)}%
-                  </p>
-                )}
-              </div>
-            </div>
+        {/* ── Communication competence ── */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', marginBottom: '24px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '4px' }}>Communication competence</h3>
+          {avg && (
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              Average across {avg.sessionCount} scored session{avg.sessionCount !== 1 ? 's' : ''} — click a dimension to learn more
+            </p>
           )}
 
-          {/* ── Communication Competence ── */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm">
-            <h3 className="font-extrabold text-gray-900 mb-1 text-base">Communication Competence</h3>
-            {avg && (
-              <p className="text-xs text-gray-400 mb-4">Average across {avg.sessionCount} scored session{avg.sessionCount !== 1 ? 's' : ''}</p>
-            )}
+          {!avg ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '24px 0' }}>No scored sessions yet.</p>
+          ) : (
+            <CommunicationRadar scores={radarScores} size={260} interactive />
+          )}
 
-            {!avg ? (
-              <p className="text-gray-400 text-sm py-6 text-center">No scored sessions yet.</p>
-            ) : (
-              <>
-                <CommunicationRadar scores={radarScores} size={260} />
+          {/* Summary accordion */}
+          {latestSummary && (
+            <div style={{ marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <button
+                onClick={() => setSummaryOpen((o) => !o)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', padding: 0 }}>
+                Summary
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                  style={{ transform: summaryOpen ? 'rotate(180deg)' : '', transition: 'transform 0.2s', flexShrink: 0 }}>
+                  <path d="M5 7.5l5 5 5-5" stroke="#555" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {summaryOpen && (
+                <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: '10px' }}>
+                  {latestSummary}
+                  <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    *Report is generated by AI — last updated based on latest scored session
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
-                {/* Per-dimension list */}
-                <div className="mt-5 space-y-2.5 border-t border-gray-100 pt-4">
-                  {radarScores.map(({ dimension, value }) => (
-                    <div key={dimension} className="flex items-center gap-3">
-                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ background: COMPETENCE_COLORS[dimension] }} />
-                      <span className="text-sm font-semibold text-gray-700 flex-1">{dimension}</span>
-                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[80px]">
-                        <div className="h-full rounded-full"
-                          style={{ width: `${value}%`, background: COMPETENCE_COLORS[dimension] }} />
-                      </div>
-                      <span className="text-sm font-extrabold text-gray-900 w-10 text-right">
-                        {Math.round(value / 10)}/10
-                      </span>
-                    </div>
-                  ))}
+        {/* ── Session history ── */}
+        {sessions.length > 0 && (
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '16px' }}>
+              Recent sessions
+            </h3>
+            {sessions.slice(0, 8).map((s, i) => (
+              <div key={s.id}>
+                {/* Date header */}
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', margin: i === 0 ? '0 0 8px' : '20px 0 8px' }}>
+                  {formatDate(s.started_at)} &bull; Session {sessions.length - i}
                 </div>
-
-                {/* Summary */}
-                {latestSummary && (
-                  <div className="mt-4 border-t border-gray-100 pt-4">
-                    <button onClick={() => setSummaryOpen((o) => !o)}
-                      className="w-full flex items-center justify-between text-sm font-bold text-gray-700">
-                      Summary
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                        strokeLinecap="round" strokeLinejoin="round"
-                        className={`transition-transform ${summaryOpen ? 'rotate-180' : ''}`}>
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
-                    {summaryOpen && (
-                      <p className="text-gray-500 text-sm mt-2 leading-relaxed">{latestSummary}</p>
-                    )}
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px 20px', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                    {getScenarioName(s.scenario_id)}
                   </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* ── Recent Practice ── */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm">
-            <h3 className="font-extrabold text-gray-900 mb-4 text-base">Recent Practice</h3>
-            {sessions.length === 0 && (
-              <p className="text-gray-400 text-sm text-center py-4">No sessions yet.</p>
-            )}
-            <div className="space-y-3">
-              {sessions.slice(0, 8).map((s, i) => (
-                <div key={s.id} className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ background: SESSION_DOT_COLORS[i % SESSION_DOT_COLORS.length] }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">
-                      {getScenarioEmoji(s.scenario_id)} {getScenarioName(s.scenario_id)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-xs text-gray-400">{formatDate(s.started_at)}</p>
-                      {s.duration_seconds && (
-                        <p className="text-xs text-gray-300">· {formatDuration(s.duration_seconds)}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      s.mode === 'survival' ? 'bg-rose-100 text-rose-600' : 'bg-green-100 text-green-700'
-                    }`}>
-                      {s.mode === 'survival' ? 'Survival' : 'Learning'}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                    <span className={s.mode === 'survival' ? 'badge-survival' : 'badge-learning'}>
+                      {s.mode === 'survival' ? 'Survival mode' : 'Learning mode'}
                     </span>
-                    {s.status === 'completed' && (
+                    <span className="badge-neutral">
+                      {formatDuration(s.duration_seconds)}
+                    </span>
+                  </div>
+                  {s.status === 'completed' && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <Link href={`/therapist/sessions/${s.id}`}
-                        className="flex items-center gap-1 text-xs font-semibold text-[#E8714A] hover:underline">
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', background: 'var(--surface-sub)', padding: '8px 14px', borderRadius: '99px', border: 'none', cursor: 'pointer', textDecoration: 'none', transition: 'background 0.15s' }}
+                        className="hover:bg-[#EAEAEF]">
                         See report
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M9 18l6-6-6-6" />
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </Link>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-
+        )}
+      </div>
       </main>
 
       <TherapistBottomNav />

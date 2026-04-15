@@ -2,21 +2,16 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import SpeechBubble from "./SpeechBubble";
 
 interface ScenarioStageProps {
-  npcResponse: string | null;
-  npcLoading: boolean;
   backgroundSrc?: string;
   npcSrc?: string;
   npcEmotion?: string; // NPC's current emotion (happy, sad, mad, confused, surprised, neutral)
 }
 
 export default function ScenarioStage({
-  npcResponse,
-  npcLoading,
   backgroundSrc = "/backgrounds/hawker-centre.jpg",
-  npcSrc = "/npc/hawker-uncle.png",
+  npcSrc = "/npc/uncle/happy.png",
   npcEmotion,
 }: ScenarioStageProps) {
   const [bgError, setBgError] = useState(false);
@@ -53,8 +48,8 @@ export default function ScenarioStage({
 
       {/* z=3: NPC photo — anchored to bottom so feet touch the ground */}
       <div
-        className="absolute left-1/2 -translate-x-1/2 w-[160%]"
-        style={{ zIndex: 3, bottom: 0, height: "260%" }}
+        className="absolute left-1/2 -translate-x-1/2 w-[60%]"
+        style={{ zIndex: 3, bottom: 0, height: '70%' }}
       >
         {!npcError && (
           <Image
@@ -72,8 +67,6 @@ export default function ScenarioStage({
         )}
       </div>
 
-      {/* z=4: Speech bubble */}
-      <SpeechBubble text={npcResponse} loading={npcLoading} />
     </div>
   );
 }

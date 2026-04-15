@@ -3,52 +3,40 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { TherapistHeader, TherapistBottomNav } from '@/components/TherapistSidebar'
+import { TherapistBottomNav } from '@/components/TherapistSidebar'
 
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
 type Category = 'Home' | 'School' | 'Community'
 const CATEGORIES: Category[] = ['Home', 'School', 'Community']
 
-const CATEGORY_ICON: Record<Category, React.ReactNode> = {
-  Home: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  School: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  Community: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  ),
-}
-
 const BUILTIN_CATEGORY: Record<string, Category> = {
   'Hawker Centre': 'Community',
-  'Group Project':  'School',
-  'Queue / Shop':   'Community',
+  'Group Project': 'School',
+  'Queue / Shop':  'Community',
 }
 
-const BUILTIN_DIFFICULTY: Record<string, { label: string; color: string }> = {
-  'Hawker Centre': { label: 'Intermediate', color: 'bg-[#E8C840] text-[#6B5800]' },
-  'Group Project':  { label: 'Beginner',    color: 'bg-[#80C870] text-[#2D5A20]' },
-  'Queue / Shop':   { label: 'Beginner',    color: 'bg-[#80C870] text-[#2D5A20]' },
+/** Returns a badge CSS class per difficulty label */
+function diffBadgeClass(label: string): string {
+  const l = label.toLowerCase()
+  if (l === 'beginner' || l === 'easy')       return 'badge-beginner'
+  if (l === 'intermediate')                    return 'badge-intermediate'
+  if (l === 'hard' || l === 'difficult')       return 'badge-hard'
+  if (l === 'advanced')                        return 'badge-advanced'
+  return 'badge-neutral'
 }
 
-const SUPPORT_TO_DIFFICULTY: Record<string, { label: string; color: string }> = {
-  High:        { label: 'Hard',         color: 'bg-[#E08080] text-white' },
-  Moderate:    { label: 'Intermediate', color: 'bg-[#E8C840] text-[#6B5800]' },
-  Low:         { label: 'Easy',         color: 'bg-[#80C870] text-[#2D5A20]' },
-  Independent: { label: 'Advanced',     color: 'bg-[#8080E8] text-white' },
+const BUILTIN_DIFFICULTY: Record<string, string> = {
+  'Hawker Centre': 'Intermediate',
+  'Group Project': 'Beginner',
+  'Queue / Shop':  'Beginner',
+}
+
+const SUPPORT_TO_DIFFICULTY: Record<string, string> = {
+  High:        'Hard',
+  Moderate:    'Intermediate',
+  Low:         'Easy',
+  Independent: 'Advanced',
 }
 
 interface DBScenario {
@@ -92,9 +80,9 @@ function getCategory(sc: DBScenario): Category {
   return BUILTIN_CATEGORY[sc.name] ?? 'Community'
 }
 
-function getDifficulty(sc: DBScenario) {
-  if (!sc.created_by) return BUILTIN_DIFFICULTY[sc.name]
-  return SUPPORT_TO_DIFFICULTY[sc.support_level ?? 'Moderate']
+function getDifficultyLabel(sc: DBScenario): string {
+  if (!sc.created_by) return BUILTIN_DIFFICULTY[sc.name] ?? 'Intermediate'
+  return SUPPORT_TO_DIFFICULTY[sc.support_level ?? 'Moderate'] ?? 'Intermediate'
 }
 
 let _cache: DBScenario[] | null = null
@@ -104,7 +92,6 @@ export default function ScenariosPage() {
   const [authChecked, setAuthChecked]     = useState(false)
   const [authToken, setAuthToken]         = useState<string | null>(null)
   const [therapistId, setTherapistId]     = useState<string | null>(null)
-  const [therapistName, setTherapistName] = useState('Therapist')
   const [scenarios, setScenarios]         = useState<DBScenario[]>(_cache ?? [])
   const [loading, setLoading]             = useState(!_cache)
   const [showForm, setShowForm]           = useState(false)
@@ -117,9 +104,6 @@ export default function ScenariosPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push('/'); return }
       if (session.user.user_metadata?.role !== 'therapist') { router.push('/learner'); return }
-      const email = session.user.email ?? ''
-      const n = email.split('@')[0]
-      setTherapistName(n.charAt(0).toUpperCase() + n.slice(1))
       setTherapistId(session.user.id)
       setAuthToken(session.access_token)
       setAuthChecked(true)
@@ -138,15 +122,8 @@ export default function ScenariosPage() {
       .catch(() => setLoading(false))
   }, [authToken])
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
-
   function openNew() {
-    setEditId(null)
-    setForm({ ...BLANK })
-    setShowForm(true)
+    setEditId(null); setForm({ ...BLANK }); setShowForm(true)
   }
 
   function openEdit(sc: DBScenario) {
@@ -179,9 +156,9 @@ export default function ScenariosPage() {
       body: JSON.stringify(body),
     })
     if (res.ok) {
-      const saved_sc: DBScenario = await res.json()
+      const savedSc: DBScenario = await res.json()
       setScenarios((prev) => {
-        const updated = editId ? prev.map((s) => (s.id === editId ? saved_sc : s)) : [...prev, saved_sc]
+        const updated = editId ? prev.map((s) => (s.id === editId ? savedSc : s)) : [...prev, savedSc]
         _cache = updated
         return updated
       })
@@ -217,110 +194,113 @@ export default function ScenariosPage() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-[#E8714A] text-xl font-bold">Loading…</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <div style={{ color: 'var(--blue)', fontSize: '18px', fontWeight: 700 }}>Loading…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
 
-
-      <div className="flex-1 flex overflow-hidden">
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* ── Library grid panel ── */}
-        <div className={`${showForm ? 'hidden md:flex' : 'flex'} flex-col flex-1 overflow-y-auto pb-28`}>
+        <div style={{ display: showForm ? undefined : 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-h) + 32px)' }}
+          className={showForm ? 'hidden md:flex md:flex-col' : ''}>
 
           {/* Header */}
-          <div className="px-6 lg:px-10 pt-8 pb-6 flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="4" rx="2" />
-                <rect x="2" y="10" width="20" height="4" rx="2" />
-                <rect x="2" y="17" width="20" height="4" rx="2" />
+          <div style={{ padding: '28px 32px 0', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ width: '40px', height: '40px', background: 'var(--surface-sub)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="6" width="16" height="12" rx="2.5" stroke="#555" strokeWidth="1.5" />
+                <path d="M6 6V5a4 4 0 018 0v1" stroke="#555" strokeWidth="1.4" strokeLinecap="round" />
+                <circle cx="10" cy="12" r="2" stroke="#555" strokeWidth="1.3" />
               </svg>
             </div>
-            <h1 className="text-2xl font-extrabold text-gray-900">Scenario Library</h1>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>Scenario library</h1>
           </div>
 
-          {loading && <div className="text-center py-16 text-gray-400">Loading…</div>}
+          {loading && <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-muted)' }}>Loading…</div>}
 
           {!loading && (
-            <div className="px-6 lg:px-10">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div style={{ padding: '0 32px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
 
                 {/* Create new card */}
-                <button
-                  onClick={openNew}
-                  className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-6 text-left hover:border-gray-300 hover:shadow-[0_2px_16px_rgba(0,0,0,0.07)] transition-all active:scale-[0.98] flex flex-col gap-4"
-                >
-                  <div className="w-11 h-11 bg-gray-100 rounded-full flex items-center justify-center">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 5v14M5 12h14" />
+                <button onClick={openNew}
+                  style={{ background: 'var(--surface)', border: '2px dashed rgba(0,0,0,.12)', borderRadius: '22px', padding: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: '12px', minHeight: '180px', transition: 'background 0.15s, border-color 0.15s', fontFamily: 'var(--font)' }}
+                  className="hover:bg-[var(--surface-sub)] hover:border-gray-300">
+                  <div style={{ width: '44px', height: '44px', background: '#111', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.18s cubic-bezier(.34,1.56,.64,1)' }}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M9 4v10M4 9h10" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
                     </svg>
                   </div>
-                  <p className="text-gray-900 font-extrabold text-2xl leading-snug">
-                    Create new<br />scenario
-                  </p>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>Create new scenario</div>
+                  <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Add a custom situation</div>
                 </button>
 
                 {/* Scenario cards */}
                 {scenarios.map((sc) => {
-                  const diff = getDifficulty(sc)
-                  const cat  = getCategory(sc)
-                  const isCustom = !!sc.created_by
+                  const diffLabel = getDifficultyLabel(sc)
+                  const cat       = getCategory(sc)
+                  const isCustom  = !!sc.created_by
                   return (
-                    <div key={sc.id} className="bg-white rounded-3xl p-6 shadow-[0_2px_16px_rgba(0,0,0,0.07)] relative flex flex-col gap-4 hover:shadow-[0_4px_24px_rgba(0,0,0,0.10)] transition-shadow">
-                      {/* Top row: pencil + trash */}
-                      <div className="flex items-center justify-between">
+                    <div key={sc.id}
+                      style={{ background: 'var(--surface)', borderRadius: '22px', padding: '24px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0', transition: 'transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s' }}
+                      className="hover:-translate-y-1 hover:shadow-card-md">
+
+                      {/* Action row — edit + delete (equal visual weight) */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginBottom: '12px' }}>
+                        {/* Edit — ghost */}
                         <button
                           onClick={() => isCustom ? openEdit(sc) : undefined}
-                          className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
-                            isCustom ? 'bg-gray-100 hover:bg-gray-200 cursor-pointer' : 'bg-gray-100 cursor-default opacity-30'
-                          }`}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          style={{
+                            width: '32px', height: '32px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: isCustom ? 'pointer' : 'default',
+                            opacity: isCustom ? 1 : 0.3,
+                            transition: 'background 0.15s',
+                            flexShrink: 0,
+                          }}
+                          className={isCustom ? 'hover:bg-[var(--surface-sub)]' : ''}
+                          title="Edit"
+                          disabled={!isCustom}>
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <path d="M9.5 2l2.5 2.5-7 7H2.5V9L9.5 2z" stroke="#555" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         </button>
+
+                        {/* Delete — ghost, red tint on hover */}
                         {isCustom ? (
                           <button
                             onClick={() => handleDelete(sc)}
-                            className="w-11 h-11 rounded-full bg-[#E07070] hover:bg-[#CC5555] flex items-center justify-center transition-colors"
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                              <path d="M10 11v6M14 11v6" />
-                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            className="btn-ghost-delete"
+                            title="Delete">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                              <path d="M2 3.5h10M5 3.5V2.5h4v1M4.5 3.5v8h5v-8" stroke="#c0394a" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           </button>
                         ) : (
-                          <div className="w-11 h-11" />
+                          <div style={{ width: '32px', height: '32px' }} />
                         )}
                       </div>
 
                       {/* Title + description */}
-                      <div>
-                        <p className="font-extrabold text-gray-900 text-2xl leading-tight">{sc.name}</p>
+                      <div style={{ marginBottom: '16px', flex: 1 }}>
+                        <div style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '4px' }}>{sc.name}</div>
                         {sc.description && (
-                          <p className="text-gray-400 text-sm mt-1.5 line-clamp-2">{sc.description}</p>
+                          <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{sc.description}</div>
                         )}
                       </div>
 
-                      {/* Difficulty + category pills */}
-                      <div className="flex flex-col gap-2">
-                        {diff && (
-                          <span className={`inline-flex items-center px-5 py-2.5 rounded-full text-[15px] font-semibold w-fit ${diff.color}`}>
-                            {diff.label}
-                          </span>
-                        )}
-                        <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-100 text-gray-500 text-[14px] font-semibold w-fit">
-                          {CATEGORY_ICON[cat]}
-                          {cat}
-                        </span>
+                      {/* Difficulty + category badges */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        <span className={diffBadgeClass(diffLabel)}>{diffLabel}</span>
+                        <span className="badge-neutral">{cat}</span>
                       </div>
                     </div>
                   )
@@ -332,86 +312,87 @@ export default function ScenariosPage() {
 
         {/* ── Form panel ── */}
         {showForm && (
-          <div className="flex-1 lg:max-w-xl lg:border-l lg:border-gray-100 overflow-y-auto bg-white pb-28">
-            <div className="px-6 py-8 max-w-xl mx-auto">
+          <div style={{ flex: 1, maxWidth: '480px', borderLeft: '1px solid var(--border)', overflowY: 'auto', background: 'var(--surface)', paddingBottom: 'calc(var(--nav-h) + 32px)' }}>
+            <div style={{ padding: '28px 32px', maxWidth: '480px' }}>
               <button
                 onClick={() => { setShowForm(false); setForm(BLANK); setEditId(null) }}
-                className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 text-sm font-semibold mb-6 transition-colors"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 18l-6-6 6-6" />
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '24px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', transition: 'color 0.15s' }}
+                className="hover:text-gray-800">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                {editId ? 'Back' : 'New Scenario'}
+                {editId ? 'Back' : 'New scenario'}
               </button>
 
-              <h2 className="text-xl font-extrabold text-gray-900 mb-6">
-                {editId ? 'Edit Scenario' : 'New Scenario'}
+              <h2 style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '24px' }}>
+                {editId ? 'Edit scenario' : 'New scenario'}
               </h2>
 
-              <div className="space-y-5">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <FormField label="Title">
                   <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="Scenario Name"
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#E8714A] bg-white" />
+                    placeholder="Scenario name"
+                    style={{ width: '100%', height: '44px', background: 'var(--surface-sub)', border: 'none', borderRadius: '14px', padding: '0 16px', fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font)', transition: 'background 0.15s' }} />
                 </FormField>
 
                 <FormField label="Description">
                   <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
                     placeholder="Describe the scenario" rows={2}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#E8714A] resize-none bg-white" />
+                    style={{ width: '100%', background: 'var(--surface-sub)', border: 'none', borderRadius: '14px', padding: '12px 16px', fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', outline: 'none', resize: 'none', fontFamily: 'var(--font)' }} />
                 </FormField>
 
                 <FormField label="Category">
-                  <div className="flex gap-2 flex-wrap">
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {CATEGORIES.map((cat) => (
                       <button key={cat} onClick={() => setForm({ ...form, category: cat })}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border transition-colors
-                          ${form.category === cat ? 'bg-[#E8714A] text-white border-[#E8714A]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>
+                        style={{
+                          padding: '8px 16px', borderRadius: '99px', fontSize: '13px', fontWeight: 600,
+                          border: '1px solid',
+                          borderColor: form.category === cat ? 'var(--blue)' : 'var(--border)',
+                          background: form.category === cat ? 'var(--nav-active-bg)' : 'var(--surface)',
+                          color: form.category === cat ? 'var(--nav-active-text)' : 'var(--text-secondary)',
+                          cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
+                        }}>
                         {cat}
                       </button>
                     ))}
                   </div>
                 </FormField>
 
-                <FormField label="Difficulty (Support Level)">
+                <FormField label="Difficulty (support level)">
                   <Chips options={['High', 'Moderate', 'Low', 'Independent']}
                     selected={[form.supportLevel]}
                     onToggle={(v) => setForm({ ...form, supportLevel: v })} />
                 </FormField>
 
-                <FormField label="Mode Access">
+                <FormField label="Mode access">
                   <Chips options={['Learning Mode', 'Survival Mode']}
                     selected={form.modeAccess}
                     multi onToggle={toggleMode} />
                 </FormField>
 
-                <FormField label="Hint Level">
+                <FormField label="Hint level">
                   <Chips options={['No hints', 'Gentle nudge', 'Full guidance']}
                     selected={[form.hintLevel]}
                     onToggle={(v) => setForm({ ...form, hintLevel: v })} />
                 </FormField>
 
-                <FormField label="NPC Personality">
-                  <div className="flex gap-2 flex-wrap">
-                    {['Friendly', 'Impatient', 'Confused'].map((v) => (
-                      <button key={v} onClick={() => setForm({ ...form, npcPersonality: v })}
-                        className={`px-3 py-1.5 rounded-xl text-sm font-semibold border transition-colors
-                          ${form.npcPersonality === v ? 'bg-[#E8714A] text-white border-[#E8714A]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>
-                        {v}
-                      </button>
-                    ))}
-                  </div>
+                <FormField label="NPC personality">
+                  <Chips options={['Friendly', 'Impatient', 'Confused']}
+                    selected={[form.npcPersonality]}
+                    onToggle={(v) => setForm({ ...form, npcPersonality: v })} />
                 </FormField>
 
-                <FormField label="Unpredictable Events">
+                <FormField label="Unpredictable events">
                   <Chips options={['Off', '1 Twist', '2+ Twist']}
                     selected={[form.unpredictableEvents]}
                     onToggle={(v) => setForm({ ...form, unpredictableEvents: v })} />
                 </FormField>
 
                 <button onClick={handleSave} disabled={saving || !form.title.trim()}
-                  className="w-full py-3 bg-[#E8714A] hover:bg-[#d4613c] disabled:opacity-50 text-white font-bold rounded-2xl transition-colors text-sm mt-2">
-                  {saved ? '✓ Saved!' : saving ? 'Saving…' : editId ? 'Save Changes' : 'Save to Library'}
+                  style={{ width: '100%', height: '52px', background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: '16px', fontSize: '15px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', transition: 'opacity 0.15s', marginTop: '4px' }}
+                  className="disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-88">
+                  {saved ? 'Saved!' : saving ? 'Saving…' : editId ? 'Save changes' : 'Save to library'}
                 </button>
               </div>
             </div>
@@ -427,7 +408,9 @@ export default function ScenariosPage() {
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
+      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+        {label}
+      </label>
       {children}
     </div>
   )
@@ -437,14 +420,23 @@ function Chips({ options, selected, onToggle, multi = false }: {
   options: string[]; selected: string[]; onToggle: (v: string) => void; multi?: boolean
 }) {
   return (
-    <div className="flex gap-2 flex-wrap">
-      {options.map((v) => (
-        <button key={v} onClick={() => onToggle(v)}
-          className={`px-3 py-1.5 rounded-xl text-sm font-semibold border transition-colors
-            ${selected.includes(v) ? 'bg-[#E8714A] text-white border-[#E8714A]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>
-          {v}
-        </button>
-      ))}
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {options.map((v) => {
+        const active = selected.includes(v)
+        return (
+          <button key={v} onClick={() => onToggle(v)}
+            style={{
+              padding: '8px 14px', borderRadius: '99px', fontSize: '13px', fontWeight: 600,
+              border: '1px solid',
+              borderColor: active ? 'var(--blue)' : 'var(--border)',
+              background: active ? 'var(--nav-active-bg)' : 'var(--surface)',
+              color: active ? 'var(--nav-active-text)' : 'var(--text-secondary)',
+              cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
+            }}>
+            {v}
+          </button>
+        )
+      })}
     </div>
   )
 }
