@@ -5,7 +5,7 @@ import { useState } from 'react'
 export interface AACIcon {
   id: string
   label: string
-  category: 'core_words' | 'social' | 'emotions' | 'scenario'
+  category: 'core_words' | 'social' | 'emotions'
   imageUrl: string
 }
 
@@ -155,131 +155,149 @@ export const ICONS: AACIcon[] = [
   { id: 'fulfilled',    label: 'fulfilled',   category: 'emotions', imageUrl: em('fulfilled') },
 ]
 
-type Category = 'core_words' | 'social' | 'emotions' | 'scenario'
+type Category = 'core_words' | 'social' | 'emotions'
 
-const CATEGORY_META: Record<Category, { label: string; tabColor: string; cellBg: string; cellBorder: string; labelColor: string; activeTab: string }> = {
+interface CategoryMeta {
+  label: string
+  activeBg: string
+  activeColor: string
+  cellBg: string
+  cellBorder: string
+  labelColor: string
+}
+
+const CATEGORY_META: Record<Category, CategoryMeta> = {
   core_words: {
     label: 'Core Words',
-    tabColor: 'bg-yellow-400 text-yellow-900 border-yellow-500',
-    cellBg: 'bg-yellow-50 border-yellow-300',
-    cellBorder: 'border-yellow-400',
-    labelColor: 'text-yellow-900',
-    activeTab: 'bg-yellow-400 text-yellow-900 border-yellow-500 shadow-md',
+    activeBg: 'var(--yellow)',
+    activeColor: '#111',
+    cellBg: '#fffde7',
+    cellBorder: '#f9d96e',
+    labelColor: '#8a6100',
   },
   social: {
     label: 'Social',
-    tabColor: 'bg-green-500 text-white border-green-600',
-    cellBg: 'bg-green-50 border-green-300',
-    cellBorder: 'border-green-400',
-    labelColor: 'text-green-900',
-    activeTab: 'bg-green-500 text-white border-green-600 shadow-md',
+    activeBg: 'var(--green)',
+    activeColor: '#fff',
+    cellBg: '#e6f4ea',
+    cellBorder: '#a8d5b5',
+    labelColor: '#1a6e35',
   },
   emotions: {
     label: 'Emotions',
-    tabColor: 'bg-pink-500 text-white border-pink-600',
-    cellBg: 'bg-pink-50 border-pink-300',
-    cellBorder: 'border-pink-400',
-    labelColor: 'text-pink-900',
-    activeTab: 'bg-pink-500 text-white border-pink-600 shadow-md',
-  },
-  scenario: {
-    label: 'Scenario',
-    tabColor: 'bg-orange-500 text-white border-orange-600',
-    cellBg: 'bg-orange-50 border-orange-300',
-    cellBorder: 'border-orange-400',
-    labelColor: 'text-orange-900',
-    activeTab: 'bg-orange-500 text-white border-orange-600 shadow-md',
+    activeBg: 'var(--pink)',
+    activeColor: '#fff',
+    cellBg: '#ffeef1',
+    cellBorder: '#ffb3bd',
+    labelColor: '#c0394a',
   },
 }
 
 interface AACBoardProps {
   onIconSelect: (icon: AACIcon) => void
   selectedIds: string[]
-  scenarioIcons?: Array<{ id: string; label: string }>
 }
 
-export default function AACBoard({ onIconSelect, selectedIds, scenarioIcons }: AACBoardProps) {
-  const [activeCategory, setActiveCategory] = useState<Category>(() =>
-    scenarioIcons && scenarioIcons.length > 0 ? 'scenario' : 'core_words'
-  )
+export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
+  const [activeCategory, setActiveCategory] = useState<Category>('core_words')
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
 
-  const hasScenario = scenarioIcons && scenarioIcons.length > 0
-
-  // Build scenario icon objects, trying core_words path first (graceful fallback on error)
-  const scenarioIconObjects: AACIcon[] = hasScenario
-    ? scenarioIcons.map((si) => ({
-        id: `scenario-${si.id}`,
-        label: si.label,
-        category: 'scenario' as const,
-        imageUrl: `/icons/core_words/${si.id}.png`,
-      }))
-    : []
-
-  const allIcons = [...ICONS, ...scenarioIconObjects]
-  const filtered = allIcons.filter((i) => i.category === activeCategory)
-
-  const visibleCategories = hasScenario
-    ? (['scenario', 'core_words', 'social', 'emotions'] as Category[])
-    : (['core_words', 'social', 'emotions'] as Category[])
+  const filtered = ICONS.filter((i) => i.category === activeCategory)
+  const m = CATEGORY_META[activeCategory]
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Category Tabs */}
-      <div className="flex gap-0 flex-shrink-0 border-b border-gray-200">
-        {visibleCategories.map((cat) => {
-          const m = CATEGORY_META[cat]
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'var(--font)' }}>
+      {/* Category tabs */}
+      <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+        {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
+          const meta = CATEGORY_META[cat]
           const active = activeCategory === cat
           return (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`flex-1 py-2.5 px-3 text-sm font-bold transition-all border-b-4
-                ${active
-                  ? `${m.activeTab} border-b-current`
-                  : 'bg-gray-50 text-gray-500 border-b-transparent hover:bg-gray-100'
-                }`}
+              style={{
+                flex: 1,
+                padding: '10px 8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                border: 'none',
+                borderBottom: active ? `3px solid ${meta.activeBg}` : '3px solid transparent',
+                background: active ? meta.activeBg : 'var(--surface-sub)',
+                color: active ? meta.activeColor : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font)',
+                transition: 'background 0.15s, color 0.15s',
+              }}
             >
-              {m.label}
+              {meta.label}
             </button>
           )
         })}
       </div>
 
-      {/* Icon Grid */}
-      <div className="grid grid-cols-3 gap-3 overflow-y-auto flex-1 p-3 bg-gray-50">
+      {/* Icon grid — renders from ICONS array only, never hardcoded inline */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+        gap: '2px',
+        padding: '8px',
+        overflowY: 'auto',
+        flex: 1,
+        background: 'var(--surface-sub)',
+      }}>
         {filtered.map((icon) => {
           const isSelected = selectedIds.includes(icon.id)
           const hasFailed = failedImages.has(icon.id)
-          const m = CATEGORY_META[icon.category]
 
           return (
             <button
               key={icon.id}
               onClick={() => onIconSelect(icon)}
-              className={`flex flex-col items-center justify-between p-3 rounded-xl border-2 transition-all active:scale-95 min-h-[100px]
-                ${isSelected
-                  ? `${m.cellBorder} ${m.cellBg} ring-2 ring-offset-1 ring-current shadow-md scale-[1.02]`
-                  : `border-gray-200 bg-white hover:${m.cellBg} hover:border-gray-300 shadow-sm`
-                }`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 4px 6px',
+                borderRadius: '10px',
+                border: isSelected ? `2px solid ${m.cellBorder}` : '2px solid transparent',
+                background: isSelected ? m.cellBg : 'var(--surface)',
+                cursor: 'pointer',
+                minHeight: '80px',
+                transition: 'background 0.12s, border-color 0.12s, transform 0.1s',
+                transform: isSelected ? 'scale(1.03)' : 'scale(1)',
+                boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,.1)' : 'none',
+                fontFamily: 'var(--font)',
+              }}
             >
-              <div className="w-14 h-14 relative flex-1 flex items-center justify-center">
+              <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
                 {!hasFailed ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={icon.imageUrl}
                     alt={icon.label}
-                    className="w-full h-full object-contain"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                     onError={() => setFailedImages(prev => new Set(prev).add(icon.id))}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-300 text-lg font-bold">
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px', fontWeight: 700 }}>
                     {icon.label.slice(0, 2).toUpperCase()}
                   </div>
                 )}
               </div>
-              <span className={`text-sm font-semibold text-center leading-tight mt-2 w-full
-                ${isSelected ? m.labelColor : 'text-gray-700'}`}>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                textAlign: 'center',
+                lineHeight: 1.2,
+                marginTop: '4px',
+                color: isSelected ? m.labelColor : 'var(--text-secondary)',
+                width: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
                 {icon.label}
               </span>
             </button>

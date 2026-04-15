@@ -5,27 +5,18 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { TherapistBottomNav } from '@/components/TherapistSidebar'
-import { CommunicationRadar } from '@/components/CommunicationRadar'
 
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
-const PERSONA_INFO: Record<string, { label: string; emoji: string; bg: string; text: string }> = {
-  garang_crab:              { label: 'Garang Crab',    emoji: '🦀', bg: 'bg-rose-50',    text: 'text-rose-700' },
-  shy_chick:                { label: 'Shy Chick',      emoji: '🐣', bg: 'bg-yellow-50',  text: 'text-yellow-700' },
-  zippy_sotong:             { label: 'Zippy Sotong',   emoji: '🦑', bg: 'bg-purple-50',  text: 'text-purple-700' },
-  curious_monkey:           { label: 'Curious Monkey', emoji: '🐒', bg: 'bg-orange-50',  text: 'text-orange-700' },
-  steady_turtle:            { label: 'Steady Turtle',  emoji: '🐢', bg: 'bg-green-50',   text: 'text-green-700' },
-  guided_learner:           { label: 'Guided Learner', emoji: '🧭', bg: 'bg-blue-50',    text: 'text-blue-700' },
-  social_practice_learner:  { label: 'Social Learner', emoji: '🤝', bg: 'bg-purple-50',  text: 'text-purple-700' },
-  independent_communicator: { label: 'Independent',    emoji: '🚀', bg: 'bg-emerald-50', text: 'text-emerald-700' },
-}
-
-const COMPETENCE_COLORS: Record<string, string> = {
-  Operational: '#7ECFF5',
-  Linguistic:  '#4ade80',
-  Social:      '#FBBF24',
-  Strategic:   '#F87171',
-  Confidence:  '#C084FC',
+const PERSONA_INFO: Record<string, { label: string; badgeClass: string }> = {
+  garang_crab:              { label: 'Garang Crab',    badgeClass: 'badge-hard' },
+  shy_chick:                { label: 'Shy Chick',      badgeClass: 'badge-intermediate' },
+  zippy_sotong:             { label: 'Zippy Sotong',   badgeClass: 'badge-advanced' },
+  curious_monkey:           { label: 'Curious Monkey', badgeClass: 'badge-intermediate' },
+  steady_turtle:            { label: 'Steady Turtle',  badgeClass: 'badge-beginner' },
+  guided_learner:           { label: 'Guided Learner', badgeClass: 'badge-beginner' },
+  social_practice_learner:  { label: 'Social Learner', badgeClass: 'badge-advanced' },
+  independent_communicator: { label: 'Independent',    badgeClass: 'badge-beginner' },
 }
 
 interface LearnerSummary {
@@ -65,130 +56,67 @@ export default function PatientsPage() {
       headers: { Authorization: `Bearer ${authToken}` },
     })
       .then((r) => r.json())
-      .then((data) => {
-        setLearners(Array.isArray(data) ? data : [])
-        setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.message)
-        setLoading(false)
-      })
+      .then((data) => { setLearners(Array.isArray(data) ? data : []); setLoading(false) })
+      .catch((err) => { setError(err.message); setLoading(false) })
   }, [authToken])
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <div className="px-5 md:px-8 pt-8">
-        <h1 className="text-2xl font-extrabold text-gray-900">Patients</h1>
-        <p className="text-gray-400 text-sm mt-1">Communication competence per learner</p>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
+
+      <div style={{ padding: '28px 32px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px' }}>
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <circle cx="9" cy="8" r="3.5" fill="#111" opacity=".8" />
+            <circle cx="15" cy="7" r="3" fill="#111" opacity=".4" />
+            <path d="M1.5 18.5C1.5 15 4.5 12 8 12s6.5 3 6.5 6.5" stroke="#111" strokeWidth="1.7" strokeLinecap="round" opacity=".8" />
+            <path d="M13 12c2.5 0 5 2 5 5.5" stroke="#111" strokeWidth="1.6" strokeLinecap="round" opacity=".4" />
+          </svg>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>All patients</h1>
+        </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto pb-28 px-5 md:px-8 pt-4 max-w-5xl mx-auto w-full">
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-h) + 32px)' }}>
+      <div style={{ maxWidth: '960px', margin: '0', padding: '0 24px' }}>
         {loading && (
-          <div className="text-center py-16 text-gray-400">Loading…</div>
+          <div style={{ textAlign: 'center', padding: '64px 0', color: 'var(--text-muted)' }}>Loading…</div>
         )}
-
         {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3 text-rose-600 text-sm mb-4">
+          <div style={{ background: 'var(--diff-hard-bg)', border: '1px solid var(--diff-hard-border)', borderRadius: '16px', padding: '12px 16px', color: 'var(--diff-hard-text)', fontSize: '13px', marginBottom: '16px' }}>
             Failed to load: {error}
           </div>
         )}
-
         {!loading && learners.length === 0 && !error && (
-          <div className="bg-white rounded-3xl p-12 shadow-sm text-center">
-            <div className="text-4xl mb-3">📊</div>
-            <p className="text-gray-400 font-semibold">No learner data yet.</p>
-            <p className="text-gray-300 text-sm mt-1">Reports appear once learners complete sessions.</p>
+          <div style={{ background: 'var(--surface)', borderRadius: '22px', padding: '48px 32px', textAlign: 'center', border: '1px solid var(--border)' }}>
+            <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-secondary)' }}>No learner data yet.</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Reports appear once learners complete sessions.</p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
           {learners.map((learner) => {
             const pi = PERSONA_INFO[learner.persona ?? '']
-            const avg = learner.competence_avg
-
-            const radarData = avg ? [
-              { dimension: 'Operational', value: avg.operational },
-              { dimension: 'Linguistic',  value: avg.linguistic },
-              { dimension: 'Social',      value: avg.social },
-              { dimension: 'Strategic',   value: avg.strategic },
-              { dimension: 'Confidence',  value: avg.confidence },
-            ] : null
 
             return (
-              <Link
-                key={learner.id}
-                href={`/therapist/reports/${learner.id}`}
-                className="bg-white rounded-3xl p-5 shadow-sm hover:shadow-md transition-shadow block"
-              >
-                {/* Header */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center font-extrabold text-lg flex-shrink-0"
-                    style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}
-                  >
-                    {learner.name[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-extrabold text-gray-900 text-base truncate">{learner.name}</p>
-                    {pi && (
-                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${pi.bg} ${pi.text} mt-0.5`}>
-                        {pi.emoji} {pi.label}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0">
-                    {learner.session_count} session{learner.session_count !== 1 ? 's' : ''}
-                  </span>
+              <Link key={learner.id} href={`/therapist/reports/${learner.id}`}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', cursor: 'pointer', textDecoration: 'none', display: 'block', transition: 'transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s' }}
+                className="hover:-translate-y-1 hover:shadow-card-md">
+
+                {/* Avatar */}
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                  {learner.name[0]}
                 </div>
 
-                {/* Pentagon radar */}
-                {radarData ? (
-                  <>
-                    <div className="flex justify-center my-1">
-                      <CommunicationRadar scores={radarData} size={200} />
-                    </div>
+                <p style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.2px', marginBottom: '4px', color: 'var(--text-primary)' }}>{learner.name}</p>
+                <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  {learner.session_count} session{learner.session_count !== 1 ? 's' : ''}
+                </p>
+                {pi && <span className={pi.badgeClass}>{pi.label}</span>}
 
-                    {/* Score bars */}
-                    <div className="mt-3 space-y-1.5 border-t border-gray-50 pt-3">
-                      {radarData.map(({ dimension, value }) => (
-                        <div key={dimension} className="flex items-center gap-2">
-                          <div
-                            className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ background: COMPETENCE_COLORS[dimension] }}
-                          />
-                          <span className="text-xs text-gray-500 w-20 flex-shrink-0">{dimension}</span>
-                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{ width: `${value}%`, background: COMPETENCE_COLORS[dimension] }}
-                            />
-                          </div>
-                          <span className="text-xs font-bold text-gray-700 w-8 text-right">
-                            {Math.round(value / 10)}/10
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <p className="text-xs text-gray-400 mt-2 text-center">
-                      Avg across {avg!.sessionCount} scored session{avg!.sessionCount !== 1 ? 's' : ''}
-                    </p>
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-gray-300 text-sm">
-                    No scored sessions yet
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end pt-3 border-t border-gray-100 mt-3">
-                  <span className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
-                    Full report →
-                  </span>
-                </div>
               </Link>
             )
           })}
         </div>
+      </div>
       </main>
 
       <TherapistBottomNav />

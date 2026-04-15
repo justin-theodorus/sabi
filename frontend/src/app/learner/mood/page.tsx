@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import logo from '@/assets/Logo.png'
 
 const QUESTIONS = [
   {
@@ -88,7 +86,8 @@ export default function MoodCheckPage() {
         style={{ flex: 1, justifyContent: 'center' }}
       >
         {/* Mascot */}
-        <Image src={logo} alt="SABI" height={72} priority className="mb-8" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/assets/sabi-mascot.png" alt="Sabi" style={{ height: '72px', width: 'auto', marginBottom: '32px', objectFit: 'contain' }} />
 
         {/* Question */}
         <h2 className="text-xl font-extrabold text-center leading-snug mb-8"
@@ -97,12 +96,13 @@ export default function MoodCheckPage() {
         </h2>
 
         {/* Options */}
-        <div className="w-full flex flex-col gap-3">
+        <div className="flex flex-col gap-3 items-center">
           {current.options.map((opt) => (
             <button
               key={opt}
               onClick={() => advance(opt)}
               className={`sabi-option${selected === opt ? ' selected' : ''}`}
+              style={{ width: 'fit-content', padding: '5px 24px', textAlign: 'center' }}
             >
               {opt}
             </button>

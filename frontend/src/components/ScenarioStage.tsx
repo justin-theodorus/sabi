@@ -2,11 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import SpeechBubble from "./SpeechBubble";
 
 interface ScenarioStageProps {
-  npcResponse: string | null;
-  npcLoading: boolean;
   backgroundSrc?: string;
   npcSrc?: string;
   npcEmotion?: string; // NPC's current emotion (happy, sad, mad, confused, surprised, neutral)
@@ -39,10 +36,8 @@ function IntruderBubble({ text }: { text: string }) {
 }
 
 export default function ScenarioStage({
-  npcResponse,
-  npcLoading,
   backgroundSrc = "/backgrounds/hawker-centre.jpg",
-  npcSrc = "/npc/hawker-uncle.png",
+  npcSrc = "/npc/uncle/happy.png",
   npcEmotion,
   activeEventText,
 }: ScenarioStageProps) {
@@ -84,10 +79,10 @@ export default function ScenarioStage({
         </div>
       )}
 
-      {/* z=3: NPC photo — anchored to bottom, sized to show full figure */}
+      {/* z=3: NPC photo — anchored to bottom so feet touch the ground */}
       <div
-        className="absolute left-1/2 -translate-x-1/2 w-[72%]"
-        style={{ zIndex: 3, bottom: 0, height: "92%" }}
+        className="absolute left-1/2 -translate-x-1/2 w-[60%]"
+        style={{ zIndex: 3, bottom: 0, height: '70%' }}
       >
         {!npcError && (
           <Image
@@ -105,10 +100,7 @@ export default function ScenarioStage({
         )}
       </div>
 
-      {/* z=4: Speech bubble */}
-      <SpeechBubble text={npcResponse} loading={npcLoading} />
-
-      {/* z=5: Intruder event bubble */}
+      {/* z=4: Intruder event bubble */}
       {activeEventText && <IntruderBubble text={activeEventText} />}
     </div>
   );
