@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchHint } from '@/lib/dialogue'
 
 interface SabiHintBarProps {
@@ -13,6 +13,9 @@ interface SabiHintBarProps {
 export default function SabiHintBar({ scenarioId, npcLastMessage, visible, availableIcons = [] }: SabiHintBarProps) {
   const [hint, setHint] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  // Use a ref so availableIcons can be read inside the effect without being a dep
+  const availableIconsRef = useRef(availableIcons)
+  availableIconsRef.current = availableIcons
 
   useEffect(() => {
     if (!visible || !npcLastMessage) return
@@ -21,7 +24,7 @@ export default function SabiHintBar({ scenarioId, npcLastMessage, visible, avail
     // Delay hint by 4s so learner has a chance to respond first
     const timer = setTimeout(async () => {
       setLoading(true)
-      const h = await fetchHint(scenarioId, npcLastMessage, availableIcons)
+      const h = await fetchHint(scenarioId, npcLastMessage, availableIconsRef.current)
       if (!cancelled) {
         setHint(h)
         setLoading(false)
@@ -33,7 +36,7 @@ export default function SabiHintBar({ scenarioId, npcLastMessage, visible, avail
       clearTimeout(timer)
       setHint('')
     }
-  }, [npcLastMessage, visible, scenarioId, availableIcons])
+  }, [npcLastMessage, visible, scenarioId])
 
   if (!visible) return null
 
@@ -45,7 +48,7 @@ export default function SabiHintBar({ scenarioId, npcLastMessage, visible, avail
     }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/assets/mascot/sabi-mascot.png"
+        src="/mascot/sabi-mascot.png"
         alt="Sabi"
         style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
         onError={(e) => {

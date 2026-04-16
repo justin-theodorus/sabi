@@ -12,9 +12,6 @@
   50%       { opacity: 0.4; }
 }
 
-/* ─── Google Fonts: DM Sans as SF Pro Rounded fallback ─── */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-
 :root {
   /* Brand colours — all UI colors must use these variables */
   --green:  #2FB05A;
@@ -24,8 +21,8 @@
 
   /* Text */
   --text-primary:   #111111;
-  --text-secondary: #767676; /* min for muted text — WCAG AA */
-  --text-muted:     #AAAAAA; /* decorative only, never body text */
+  --text-secondary: #767676;
+  --text-muted:     #AAAAAA;
 
   /* Surfaces */
   --surface:     #FFFFFF;
@@ -63,7 +60,7 @@
   --mode-survival-text:   #c0394a;
   --mode-survival-border: #ffb3bd;
 
-  /* Legacy — kept for backward compat, migrated gradually */
+  /* Legacy — kept for backward compat */
   --color-primary:       #7DB2F6;
   --color-primary-dark:  #5a9de8;
   --color-primary-light: #dbeafe;
@@ -77,7 +74,7 @@
   --color-text-muted:    #AAAAAA;
   --radius-sm:   0.5rem;
   --radius-md:   0.75rem;
-  --radius-lg:   1.375rem;  /* 22px — card radius */
+  --radius-lg:   1.375rem;
   --radius-xl:   1.375rem;
   --radius-2xl:  1.375rem;
   --radius-pill: 9999px;
@@ -86,9 +83,7 @@
   --ease:        0.18s cubic-bezier(.34,1.56,.64,1);
 }
 
-/* ─────────────────────────────────────────────
-   Base
-   ───────────────────────────────────────────── */
+/* ─── Base ─── */
 *,
 *::before,
 *::after {
@@ -108,344 +103,471 @@ body {
   min-height: 100dvh;
 }
 
-/* ─────────────────────────────────────────────
-   Badge system — tinted, never solid fills
-   ───────────────────────────────────────────── */
-@layer components {
-  /* Base badge */
-  .badge {
-    @apply inline-flex items-center gap-1;
-    padding: 4px 12px;
-    border-radius: 99px;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-    font-family: var(--font);
-  }
+/* ─── Badge base (shared by all badge variants) ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+}
 
-  /* Difficulty badges */
-  .badge-beginner {
-    @apply badge;
-    background: var(--diff-beginner-bg);
-    color: var(--diff-beginner-text);
-    border: 1px solid var(--diff-beginner-border);
-  }
-  .badge-intermediate {
-    @apply badge;
-    background: var(--diff-inter-bg);
-    color: var(--diff-inter-text);
-    border: 1px solid var(--diff-inter-border);
-  }
-  .badge-hard {
-    @apply badge;
-    background: var(--diff-hard-bg);
-    color: var(--diff-hard-text);
-    border: 1px solid var(--diff-hard-border);
-  }
-  .badge-advanced {
-    @apply badge;
-    background: var(--diff-advanced-bg);
-    color: var(--diff-advanced-text);
-    border: 1px solid var(--diff-advanced-border);
-  }
+/* Difficulty badges */
+.badge-beginner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-beginner-bg);
+  color: var(--diff-beginner-text);
+  border: 1px solid var(--diff-beginner-border);
+}
+.badge-intermediate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-inter-bg);
+  color: var(--diff-inter-text);
+  border: 1px solid var(--diff-inter-border);
+}
+.badge-hard {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-hard-bg);
+  color: var(--diff-hard-text);
+  border: 1px solid var(--diff-hard-border);
+}
+.badge-advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-advanced-bg);
+  color: var(--diff-advanced-text);
+  border: 1px solid var(--diff-advanced-border);
+}
 
-  /* Mode badges */
-  .badge-learning {
-    @apply badge;
-    background: var(--mode-learning-bg);
-    color: var(--mode-learning-text);
-    border: 1px solid var(--mode-learning-border);
-  }
-  .badge-survival {
-    @apply badge;
-    background: var(--mode-survival-bg);
-    color: var(--mode-survival-text);
-    border: 1px solid var(--mode-survival-border);
-  }
+/* Mode badges */
+.badge-learning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--mode-learning-bg);
+  color: var(--mode-learning-text);
+  border: 1px solid var(--mode-learning-border);
+}
+.badge-survival {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--mode-survival-bg);
+  color: var(--mode-survival-text);
+  border: 1px solid var(--mode-survival-border);
+}
 
-  /* Neutral badge */
-  .badge-neutral {
-    @apply badge;
-    background: #f5f5f5;
-    color: #555555;
-    border: 1px solid #e0e0e0;
-  }
+/* Neutral badge */
+.badge-neutral {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: #f5f5f5;
+  color: #555555;
+  border: 1px solid #e0e0e0;
+}
 
-  /* ── Page shell ── */
-  .sabi-page {
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg);
-    color: var(--text-primary);
-    font-family: var(--font);
-  }
+/* ─── Page shell ─── */
+.sabi-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font);
+}
 
-  .sabi-centered {
-    @apply flex flex-col items-center justify-center flex-1 px-6 py-12 w-full max-w-xs mx-auto;
-  }
+.sabi-centered {
+  @apply flex flex-col items-center justify-center flex-1 px-6 py-12 w-full max-w-xs mx-auto;
+}
 
-  /* ── Card ── */
-  .sabi-card {
-    @apply w-full;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    box-shadow: var(--shadow-sm);
-    padding: 24px;
-  }
+/* ─── Card ─── */
+.sabi-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+}
 
-  /* ── Inputs ── */
-  .sabi-input {
-    @apply w-full;
-    height: 44px;
-    background: var(--surface-sub);
-    border: none;
-    border-radius: 99px;
-    color: var(--text-primary);
-    padding: 0 18px;
-    font-size: 14px;
-    font-weight: 500;
-    outline: none;
-    transition: background 0.18s;
-    font-family: var(--font);
-  }
-  .sabi-input::placeholder {
-    color: var(--text-muted);
-    font-weight: 400;
-  }
-  .sabi-input:focus {
-    background: #EAEAEF;
-    box-shadow: 0 0 0 2px rgba(125,178,246,.35);
-  }
+/* ─── Inputs ─── */
+.sabi-input {
+  width: 100%;
+  height: 44px;
+  background: var(--surface-sub);
+  border: none;
+  border-radius: 99px;
+  color: var(--text-primary);
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: background 0.18s;
+  font-family: var(--font);
+}
+.sabi-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.sabi-input:focus {
+  background: #EAEAEF;
+  box-shadow: 0 0 0 2px rgba(125,178,246,.35);
+}
 
-  /* ── Buttons ── */
-  .sabi-btn {
-    @apply inline-flex items-center justify-center;
-    border: none;
-    border-radius: 99px;
-    cursor: pointer;
-    padding: 12px 24px;
-    font-size: 14px;
-    font-weight: 700;
-    transition: background 0.18s, opacity 0.18s, transform var(--ease);
-    font-family: var(--font);
-    min-height: 44px;
-  }
-  .sabi-btn:active {
-    transform: scale(0.97);
-  }
-  .sabi-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    pointer-events: none;
-  }
-  .sabi-btn:focus-visible {
-    outline: 2px solid var(--blue);
-    outline-offset: 2px;
-  }
+/* ─── Buttons (base) ─── */
+.sabi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+}
+.sabi-btn:active {
+  transform: scale(0.97);
+}
+.sabi-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.sabi-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 
-  .sabi-btn-primary {
-    @apply sabi-btn w-full;
-    background: var(--blue);
-    color: #fff;
-  }
-  .sabi-btn-primary:hover:not(:disabled) {
-    background: #5a9de8;
-  }
+.sabi-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+  width: 100%;
+  background: var(--blue);
+  color: #fff;
+}
+.sabi-btn-primary:hover:not(:disabled) {
+  background: #5a9de8;
+}
+.sabi-btn-primary:active {
+  transform: scale(0.97);
+}
+.sabi-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.sabi-btn-primary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 
-  .sabi-btn-accent {
-    @apply sabi-btn w-full;
-    background: var(--green);
-    color: #fff;
-  }
-  .sabi-btn-accent:hover:not(:disabled) {
-    background: #259e4f;
-  }
+.sabi-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+  width: 100%;
+  background: var(--green);
+  color: #fff;
+}
+.sabi-btn-accent:hover:not(:disabled) {
+  background: #259e4f;
+}
+.sabi-btn-accent:active {
+  transform: scale(0.97);
+}
+.sabi-btn-accent:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
-  .sabi-btn-ghost {
-    @apply sabi-btn;
-    background: var(--surface-sub);
-    color: var(--text-primary);
-  }
-  .sabi-btn-ghost:hover:not(:disabled) {
-    background: #EAEAEF;
-  }
+.sabi-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+  background: var(--surface-sub);
+  color: var(--text-primary);
+}
+.sabi-btn-ghost:hover:not(:disabled) {
+  background: #EAEAEF;
+}
+.sabi-btn-ghost:active {
+  transform: scale(0.97);
+}
+.sabi-btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
-  /* ── Pill answer option (mood / check-in) ── */
-  .sabi-option {
-    @apply w-full text-center;
-    height: 52px;
-    background: var(--surface-sub);
-    border: 1.5px solid transparent;
-    border-radius: 16px;
-    color: var(--text-primary);
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, transform 0.12s;
-    font-family: var(--font);
-  }
-  .sabi-option:hover {
-    background: #EAEAEF;
-  }
-  .sabi-option:active {
-    transform: scale(0.97);
-  }
-  .sabi-option.selected {
-    background: var(--nav-active-bg);
-    border-color: #a8c8f5;
-    color: var(--nav-active-text);
-  }
+/* ─── Pill answer option (mood / check-in) ─── */
+.sabi-option {
+  width: 100%;
+  text-align: center;
+  height: 52px;
+  background: var(--surface-sub);
+  border: 1.5px solid transparent;
+  border-radius: 16px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  font-family: var(--font);
+}
+.sabi-option:hover {
+  background: #EAEAEF;
+}
+.sabi-option:active {
+  transform: scale(0.97);
+}
+.sabi-option.selected {
+  background: var(--nav-active-bg);
+  border-color: #a8c8f5;
+  color: var(--nav-active-text);
+}
 
-  /* ── Progress dots ── */
-  .sabi-dot {
-    @apply inline-block rounded-full transition-all duration-300;
-    height: 6px;
-    background: var(--border);
-    width: 6px;
-  }
-  .sabi-dot.active {
-    background: var(--green);
-    width: 24px;
-  }
-  .sabi-dot.done {
-    background: var(--green);
-    opacity: 0.4;
-  }
+/* ─── Progress dots ─── */
+.sabi-dot {
+  display: inline-block;
+  border-radius: 9999px;
+  transition: all 0.3s;
+  height: 6px;
+  background: var(--border);
+  width: 6px;
+}
+.sabi-dot.active {
+  background: var(--green);
+  width: 24px;
+}
+.sabi-dot.done {
+  background: var(--green);
+  opacity: 0.4;
+}
 
-  /* ── Role card (login screen 1) ── */
-  .sabi-role-card {
-    @apply flex flex-col items-center gap-3 cursor-pointer;
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: 22px;
-    padding: 20px 16px;
-    transition: background 0.15s, border-color 0.15s, transform var(--ease);
-    font-family: var(--font);
-  }
-  .sabi-role-card:hover {
-    background: var(--surface-sub);
-    border-color: rgba(0,0,0,.18);
-  }
-  .sabi-role-card:active {
-    transform: scale(0.97);
-  }
+/* ─── Role card (login screen) ─── */
+.sabi-role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 22px;
+  padding: 20px 16px;
+  transition: background 0.15s, border-color 0.15s, transform var(--ease);
+  font-family: var(--font);
+}
+.sabi-role-card:hover {
+  background: var(--surface-sub);
+  border-color: rgba(0,0,0,.18);
+}
+.sabi-role-card:active {
+  transform: scale(0.97);
+}
 
-  /* ── Back link ── */
-  .sabi-back {
-    @apply inline-flex items-center gap-1.5;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: none;
-    border: none;
-    cursor: pointer;
-    transition: color 0.15s;
-    font-family: var(--font);
-  }
-  .sabi-back:hover {
-    color: var(--text-secondary);
-  }
+/* ─── Back link ─── */
+.sabi-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s;
+  font-family: var(--font);
+}
+.sabi-back:hover {
+  color: var(--text-secondary);
+}
 
-  /* ── CTA circle button (used on colored cards) ── */
-  .cta-circle {
-    width: 48px;
-    height: 48px;
-    background: #111111;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: flex-start;
-    transition: transform var(--ease), background 0.15s;
-  }
-  .cta-circle:hover {
-    background: #2a2a2a;
-    transform: scale(1.1);
-  }
-  .cta-circle:active {
-    transform: scale(0.95);
-  }
-  .cta-circle:focus-visible {
-    outline: 2px solid #111111;
-    outline-offset: 2px;
-  }
+/* ─── CTA circle button (colored cards) ─── */
+.cta-circle {
+  width: 48px;
+  height: 48px;
+  background: #111111;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: flex-start;
+  transition: transform var(--ease), background 0.15s;
+}
+.cta-circle:hover {
+  background: #2a2a2a;
+  transform: scale(1.1);
+}
+.cta-circle:active {
+  transform: scale(0.95);
+}
+.cta-circle:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 2px;
+}
 
-  /* ── Ghost delete button ── */
-  .btn-ghost-delete {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    flex-shrink: 0;
-  }
-  .btn-ghost-delete:hover {
-    background: #fdf3f2;
-    border-color: #f5b5b0;
-  }
-  .btn-ghost-delete:focus-visible {
-    outline: 2px solid #c0394a;
-    outline-offset: 2px;
-  }
+/* ─── Ghost delete button ─── */
+.btn-ghost-delete {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.btn-ghost-delete:hover {
+  background: #fdf3f2;
+  border-color: #f5b5b0;
+}
+.btn-ghost-delete:focus-visible {
+  outline: 2px solid #c0394a;
+  outline-offset: 2px;
+}
 
-  /* ── Colored action card (home dashboard) ── */
-  .action-card {
-    border-radius: 22px;
-    padding: 24px;
-    min-height: 244px;
-    display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s;
-  }
-  .action-card:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow: 0 16px 40px rgba(0,0,0,.11);
-  }
-  .action-card:focus-visible {
-    outline: 2px solid var(--text-primary);
-    outline-offset: 2px;
-  }
-  .action-card-spacer {
-    flex: 1;
-    min-height: 20px;
-  }
-  .action-card-icon {
-    width: 56px;
-    height: 56px;
-    background: rgba(255,255,255,.72);
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: flex-start;
-  }
-  .action-card-body {
-    margin-bottom: 16px;
-  }
-  .action-card-body h2 {
-    font-size: 20px;
-    font-weight: 800;
-    line-height: 1.2;
-    letter-spacing: -0.2px;
-    color: var(--text-primary);
-    margin-bottom: 6px;
-  }
-  .action-card-body p {
-    font-size: 13px;
-    font-weight: 500;
-    color: rgba(0,0,0,.52);
-    line-height: 1.45;
-  }
+/* ─── Colored action card (dashboard) ─── */
+.action-card {
+  border-radius: 22px;
+  padding: 24px;
+  min-height: 244px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s;
+}
+.action-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 40px rgba(0,0,0,.11);
+}
+.action-card:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.action-card-spacer {
+  flex: 1;
+  min-height: 20px;
+}
+.action-card-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(255,255,255,.72);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.action-card-body {
+  margin-bottom: 16px;
+}
+.action-card-body h2 {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.action-card-body p {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(0,0,0,.52);
+  line-height: 1.45;
 }

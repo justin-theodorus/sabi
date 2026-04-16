@@ -150,7 +150,7 @@ function LobbyScreen({
         </button>
       </div>
 
-      <main style={{ flex: 1, overflowY: 'auto', padding: '24px', maxWidth: '480px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '720px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* Scene title + description */}
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: '8px' }}>
@@ -743,12 +743,12 @@ export default function PracticePage() {
       {/* SABI Hint bar — learning mode, fixed below header, above scene */}
       {mode === 'learning' && (
         <div style={{ position: 'absolute', top: '52px', left: 0, right: 0, zIndex: 10 }}>
-          <SabiHintBar scenarioId={scenario.id} npcLastMessage={npcResponse} visible={!npcLoading && !!npcResponse} />
+          <SabiHintBar scenarioId={scenario.id} npcLastMessage={npcResponse} visible={!npcLoading && !!npcResponse} availableIcons={availableIconLabels} />
         </div>
       )}
 
-      {/* NPC Speech bubble — sits below hint bar */}
-      <div style={{ position: 'absolute', top: mode === 'learning' ? '104px' : '52px', left: 0, right: 0, zIndex: 10 }}>
+      {/* NPC Speech bubble — floats just above NPC's head (NPC occupies bottom 70%) */}
+      <div style={{ position: 'absolute', bottom: '66%', left: 0, right: 0, zIndex: 10 }}>
         <SpeechBubble text={npcResponse} loading={npcLoading} />
       </div>
 
@@ -796,7 +796,7 @@ export default function PracticePage() {
         ) : (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src="/assets/icons/aac-device.png"
+            src="/icons/aac-device.png"
             alt="AAC"
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '18px' }}
             onError={(e) => {
@@ -844,7 +844,7 @@ export default function PracticePage() {
                     <button key={`${icon.id}-${i}`} onClick={() => handleRemoveIcon(i)}
                       style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--nav-active-bg)', border: 'none', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer', fontFamily: 'var(--font)', transition: 'background 0.12s' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/icons/${icon.category}/${icon.id}.png`} alt={icon.label} style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+                      <img src={icon.imageUrl} alt={icon.label} style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
                       <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--nav-active-text)' }}>{icon.label}</span>
                     </button>
                   ))
@@ -875,7 +875,7 @@ export default function PracticePage() {
 
             {/* AACBoard — tile grid from component, renders API icons only */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              <AACBoard onIconSelect={handleIconSelect} selectedIds={selectedIcons.map((i) => i.id)} />
+              <AACBoard onIconSelect={handleIconSelect} selectedIds={selectedIcons.map((i) => i.id)} scenarioIcons={scenario.scenarioIcons} />
             </div>
           </div>
         </div>

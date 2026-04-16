@@ -87,7 +87,7 @@ export default function MoodCheckPage() {
       >
         {/* Mascot */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/assets/sabi-mascot.png" alt="Sabi" style={{ height: '72px', width: 'auto', marginBottom: '32px', objectFit: 'contain' }} />
+        <img src="/sabi-mascot.png" alt="Sabi" style={{ height: '72px', width: 'auto', marginBottom: '32px', objectFit: 'contain' }} />
 
         {/* Question */}
         <h2 className="text-xl font-extrabold text-center leading-snug mb-8"

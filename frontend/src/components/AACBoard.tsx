@@ -5,8 +5,13 @@ import { useState } from 'react'
 export interface AACIcon {
   id: string
   label: string
-  category: 'core_words' | 'social' | 'emotions'
+  category: 'core_words' | 'social' | 'emotions' | 'scenario'
   imageUrl: string
+}
+
+export interface ScenarioIconInput {
+  id: string
+  label: string
 }
 
 // helper — every icon has a local path, no external requests
@@ -155,7 +160,7 @@ export const ICONS: AACIcon[] = [
   { id: 'fulfilled',    label: 'fulfilled',   category: 'emotions', imageUrl: em('fulfilled') },
 ]
 
-type Category = 'core_words' | 'social' | 'emotions'
+type Category = 'core_words' | 'social' | 'emotions' | 'scenario'
 
 interface CategoryMeta {
   label: string
@@ -191,25 +196,50 @@ const CATEGORY_META: Record<Category, CategoryMeta> = {
     cellBorder: '#ffb3bd',
     labelColor: '#c0394a',
   },
+  scenario: {
+    label: 'Scenario',
+    activeBg: '#3b82f6',
+    activeColor: '#fff',
+    cellBg: '#eff6ff',
+    cellBorder: '#93c5fd',
+    labelColor: '#1d4ed8',
+  },
 }
 
 interface AACBoardProps {
   onIconSelect: (icon: AACIcon) => void
   selectedIds: string[]
+  scenarioIcons?: ScenarioIconInput[]
 }
 
-export default function AACBoard({ onIconSelect, selectedIds }: AACBoardProps) {
+export default function AACBoard({ onIconSelect, selectedIds, scenarioIcons = [] }: AACBoardProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('core_words')
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
 
-  const filtered = ICONS.filter((i) => i.category === activeCategory)
+  // Build scenario icons as AACIcon entries.
+  // The fetch script saves scenario-specific vocab into core_words/; fall back to text if missing.
+  const scenarioAACIcons: AACIcon[] = scenarioIcons.map((si) => ({
+    id: `scenario-${si.id}`,
+    label: si.label,
+    category: 'scenario',
+    imageUrl: `/icons/core_words/${si.id}.png`,
+  }))
+
+  const visibleCategories: Category[] = scenarioIcons.length > 0
+    ? ['core_words', 'social', 'emotions', 'scenario']
+    : ['core_words', 'social', 'emotions']
+
+  const filtered = activeCategory === 'scenario'
+    ? scenarioAACIcons
+    : ICONS.filter((i) => i.category === activeCategory)
+
   const m = CATEGORY_META[activeCategory]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'var(--font)' }}>
       {/* Category tabs */}
       <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
-        {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
+        {visibleCategories.map((cat) => {
           const meta = CATEGORY_META[cat]
           const active = activeCategory === cat
           return (

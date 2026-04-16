@@ -10,6 +10,7 @@ import { CommunicationRadar } from '@/components/CommunicationRadar'
 import { TherapistBottomNav } from '@/components/TherapistSidebar'
 
 const DIALOGUE_URL = process.env.NEXT_PUBLIC_DIALOGUE_URL || 'http://localhost:8001'
+const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
 interface Session {
   id: string
@@ -413,7 +414,7 @@ export default function SessionReportPage() {
               <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video
-                  src={session.video_url}
+                  src={`${SESSION_URL}/sessions/${sessionId}/video-stream`}
                   preload="metadata"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   onLoadedMetadata={(e) => {
@@ -422,17 +423,15 @@ export default function SessionReportPage() {
                     vid.currentTime = 1
                   }}
                 />
-                <a
-                  href={session.video_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href={`/therapist/sessions/${sessionId}/recording`}
                   style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)', textDecoration: 'none' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                       <path d="M5 3.5l10 5.5-10 5.5V3.5z" fill="#111" />
                     </svg>
                   </div>
-                </a>
+                </Link>
               </div>
               <Link
                 href={`/therapist/sessions/${sessionId}/recording`}

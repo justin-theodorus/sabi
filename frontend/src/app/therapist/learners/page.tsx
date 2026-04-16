@@ -4,20 +4,20 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { TherapistHeader, TherapistBottomNav } from '@/components/TherapistSidebar'
+import { TherapistBottomNav } from '@/components/TherapistSidebar'
 import { CommunicationRadar } from '@/components/CommunicationRadar'
 
 const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
-const PERSONA_INFO: Record<string, { label: string; emoji: string; bg: string; text: string; desc: string; focus: string }> = {
-  garang_crab:             { label: 'Garang Crab',   emoji: '🦀', bg: 'bg-rose-50',    text: 'text-rose-700',    desc: 'Confident communicator, high initiation, may rush responses.',   focus: 'Strategic competency.' },
-  shy_chick:               { label: 'Shy Chick',     emoji: '🐣', bg: 'bg-yellow-50',  text: 'text-yellow-700',  desc: 'Hesitant communicator, high latency, frequent re-prompts.',       focus: 'Confidence building.' },
-  zippy_sotong:            { label: 'Zippy Sotong',  emoji: '🦑', bg: 'bg-purple-50',  text: 'text-purple-700',  desc: 'Very energetic but lacks structure, rushes interactions.',         focus: 'Linguistic structure.' },
-  curious_monkey:          { label: 'Curious Monkey',emoji: '🐒', bg: 'bg-orange-50',  text: 'text-orange-700',  desc: 'Exploratory and playful, tries varied communication patterns.',    focus: 'Operational fluency.' },
-  steady_turtle:           { label: 'Steady Turtle', emoji: '🐢', bg: 'bg-green-50',   text: 'text-green-700',   desc: 'Reflective and calm, thoughtful moderate-pace engagement.',        focus: 'Social engagement.' },
-  guided_learner:          { label: 'Guided Learner',emoji: '🧭', bg: 'bg-blue-50',    text: 'text-blue-700',    desc: 'Thrives with hints and step-by-step support.',                     focus: 'Confidence building.' },
-  social_practice_learner: { label: 'Social Learner',emoji: '🤝', bg: 'bg-purple-50',  text: 'text-purple-700',  desc: 'Loves interactive conversations and social practice.',             focus: 'Social competency.' },
-  independent_communicator:{ label: 'Independent',   emoji: '🚀', bg: 'bg-emerald-50', text: 'text-emerald-700', desc: 'Works best independently, tackles challenges head-on.',            focus: 'Strategic competency.' },
+const PERSONA_INFO: Record<string, { label: string; emoji: string; bg: string; color: string; desc: string; focus: string }> = {
+  garang_crab:             { label: 'Garang Crab',   emoji: '🦀', bg: 'var(--diff-hard-bg)',      color: 'var(--diff-hard-text)',     desc: 'Confident communicator, high initiation, may rush responses.',   focus: 'Strategic competency.' },
+  shy_chick:               { label: 'Shy Chick',     emoji: '🐣', bg: 'var(--diff-inter-bg)',     color: 'var(--diff-inter-text)',    desc: 'Hesitant communicator, high latency, frequent re-prompts.',       focus: 'Confidence building.' },
+  zippy_sotong:            { label: 'Zippy Sotong',  emoji: '🦑', bg: 'var(--diff-advanced-bg)',  color: 'var(--diff-advanced-text)', desc: 'Very energetic but lacks structure, rushes interactions.',         focus: 'Linguistic structure.' },
+  curious_monkey:          { label: 'Curious Monkey',emoji: '🐒', bg: 'var(--diff-inter-bg)',     color: 'var(--diff-inter-text)',    desc: 'Exploratory and playful, tries varied communication patterns.',    focus: 'Operational fluency.' },
+  steady_turtle:           { label: 'Steady Turtle', emoji: '🐢', bg: 'var(--diff-beginner-bg)',  color: 'var(--diff-beginner-text)', desc: 'Reflective and calm, thoughtful moderate-pace engagement.',        focus: 'Social engagement.' },
+  guided_learner:          { label: 'Guided Learner',emoji: '🧭', bg: 'var(--diff-beginner-bg)',  color: 'var(--diff-beginner-text)', desc: 'Thrives with hints and step-by-step support.',                     focus: 'Confidence building.' },
+  social_practice_learner: { label: 'Social Learner',emoji: '🤝', bg: 'var(--diff-advanced-bg)',  color: 'var(--diff-advanced-text)', desc: 'Loves interactive conversations and social practice.',             focus: 'Social competency.' },
+  independent_communicator:{ label: 'Independent',   emoji: '🚀', bg: 'var(--diff-beginner-bg)',  color: 'var(--diff-beginner-text)', desc: 'Works best independently, tackles challenges head-on.',            focus: 'Strategic competency.' },
 }
 
 const BUILTIN_CATEGORY: Record<string, string> = {
@@ -270,11 +270,11 @@ export default function LearnersPage() {
 
             {/* Persona card */}
             {personaInfo && (
-              <div className={`${personaInfo.bg} rounded-2xl p-4 flex items-start gap-3`}>
-                <span className="text-2xl">{personaInfo.emoji}</span>
+              <div style={{ background: personaInfo.bg, borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <span style={{ fontSize: '24px' }}>{personaInfo.emoji}</span>
                 <div>
-                  <p className={`font-bold text-sm ${personaInfo.text}`}>{personaInfo.label}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">{personaInfo.desc} Focus: {personaInfo.focus}</p>
+                  <p style={{ fontWeight: 700, fontSize: '13px', color: personaInfo.color }}>{personaInfo.label}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{personaInfo.desc} Focus: {personaInfo.focus}</p>
                 </div>
               </div>
             )}

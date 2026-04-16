@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { TherapistHeader, TherapistBottomNav } from '@/components/TherapistSidebar'
+import { TherapistBottomNav } from '@/components/TherapistSidebar'
 
 export default function TherapistProfilePage() {
   const router = useRouter()
@@ -31,53 +31,55 @@ export default function TherapistProfilePage() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-[#E8714A] text-xl font-bold">Loading…</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <div style={{ color: 'var(--blue)', fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font)' }}>Loading…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
 
-
-      <div className="px-5 md:px-8 pt-8">
-        <h1 className="text-2xl font-extrabold text-gray-900">Profile</h1>
-        <p className="text-gray-400 text-sm mt-1">Your account settings</p>
+      <div style={{ padding: '28px 32px 0' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: '2px' }}>Profile</h1>
+        <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Your account settings</p>
       </div>
 
-      <main className="flex-1 overflow-y-auto pb-28 px-5 md:px-8 pt-4 space-y-4 max-w-lg mx-auto w-full">
+      <main style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', paddingBottom: 'calc(var(--nav-h) + 32px)', maxWidth: '480px', width: '100%' }}>
 
         {/* Avatar + name */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm flex items-center gap-5">
-          <div className="w-20 h-20 rounded-3xl bg-[#FDE8DC] flex items-center justify-center text-[#E8714A] font-extrabold text-2xl flex-shrink-0">
+        <div style={{ background: 'var(--surface)', borderRadius: '22px', padding: '24px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '16px' }}>
+          <div style={{ width: '72px', height: '72px', borderRadius: '22px', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', fontWeight: 800, color: 'var(--text-secondary)', flexShrink: 0 }}>
             {therapistName[0]}
           </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-gray-900 text-xl font-extrabold">Dr. {therapistName}</h2>
-            <p className="text-gray-400 text-sm mt-0.5 truncate">{email}</p>
-            <div className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#E8714A] bg-[#FDE8DC] px-2.5 py-1 rounded-full">
-              Therapist
-            </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>Dr. {therapistName}</p>
+            <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</p>
+            <span className="badge-beginner" style={{ marginTop: '8px', display: 'inline-block' }}>Therapist</span>
           </div>
         </div>
 
         {/* Settings */}
-        <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-gray-900 font-bold">Settings</p>
+        <div style={{ background: 'var(--surface)', borderRadius: '22px', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: '16px' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>Settings</p>
           </div>
           {[
             { icon: '🔔', label: 'Notifications', value: 'On' },
             { icon: '🌐', label: 'Language', value: 'English' },
             { icon: '🔒', label: 'Privacy', value: 'Manage' },
           ].map((s, i, arr) => (
-            <div key={s.label} className={`flex items-center justify-between px-5 py-4 ${i < arr.length - 1 ? 'border-b border-gray-50' : ''}`}>
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{s.icon}</span>
-                <span className="text-gray-800 font-semibold text-sm">{s.label}</span>
+            <div key={s.label}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '14px 20px',
+                borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '20px' }}>{s.icon}</span>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.label}</span>
               </div>
-              <span className="text-gray-400 text-sm">{s.value}</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>{s.value}</span>
             </div>
           ))}
         </div>
@@ -85,12 +87,19 @@ export default function TherapistProfilePage() {
         {/* Sign out */}
         <button
           onClick={handleSignOut}
-          className="w-full py-4 bg-white rounded-3xl shadow-sm text-rose-500 font-bold hover:bg-rose-50 transition-colors"
+          style={{
+            width: '100%', padding: '14px', background: 'var(--surface)',
+            border: '1px solid var(--diff-hard-border)', borderRadius: '22px',
+            color: 'var(--diff-hard-text)', fontSize: '14px', fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'var(--font)', transition: 'background 0.15s',
+          }}
         >
           Sign Out
         </button>
 
-        <p className="text-center text-gray-300 text-xs pb-2">SABI · AAC Communication Training · v0.1</p>
+        <p style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', marginTop: '16px' }}>
+          SABI · AAC Communication Training · v0.1
+        </p>
       </main>
 
       <TherapistBottomNav />
