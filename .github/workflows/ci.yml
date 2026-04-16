@@ -91,14 +91,16 @@ jobs:
         run: |
           docker compose up -d \
             redis minio \
-            dialogue-engine persona-engine session-service aac-icon-service
+            dialogue-engine dialogue-queue-api persona-engine session-service aac-icon-service
         env:
           COMPOSE_FILE: docker-compose.yml
 
       - name: Wait for services to be ready
         run: |
           echo "Waiting up to 60s for services..."
-          for port in 8001 8002 8004 8005; do
+          # dialogue-engine (8001) is internal-only — not exposed on host.
+          # dialogue-queue-api (8006) is the public-facing entry point for dialogue.
+          for port in 8006 8002 8004 8005; do
             for i in $(seq 1 30); do
               if curl -sf http://localhost:$port/health > /dev/null 2>&1; then
                 echo "  Port $port ✓"
@@ -115,8 +117,8 @@ jobs:
 
       - name: Verify health endpoints
         run: |
-          echo "dialogue-engine:"
-          curl -sf http://localhost:8001/health | jq .
+          echo "dialogue-queue-api:"
+          curl -sf http://localhost:8006/health | jq .
 
           echo "persona-engine:"
           curl -sf http://localhost:8002/health | jq .
