@@ -238,6 +238,7 @@ MODE_PROMPTS = {
 
 def text_to_speech_base64(text: str, scenario_id: str) -> Optional[str]:
     """Call ElevenLabs and return base64-encoded MP3. Returns None if key missing or free plan."""
+    global _elevenlabs_disabled
     if not ELEVENLABS_API_KEY or _elevenlabs_disabled:
         return None
     voice_id = SCENARIO_VOICE_IDS.get(scenario_id, DEFAULT_VOICE_ID)
@@ -473,11 +474,11 @@ def build_system_prompt(
         f"  scenario={scenario_id}  mode={mode}  persona={persona}"
         + (f"  personality_override={npc_personality}" if npc_personality else "")
         + (f"  support_override={support_level}" if support_level else "")
-        + (f"  custom_prompt=YES" if custom_npc_prompt else "")
+        + ("  custom_prompt=YES" if custom_npc_prompt else "")
         + (f"\n  emotion_context={emotion.summary_emotion} ({emotion.avg_score:.0f}%)" if emotion else "")
         + (f"  turn_index={turn_index}" if turn_index is not None else "")
-        + (f"  npc_initiated=YES" if npc_initiated else "")
-        + (f"  active_event=YES" if active_event else "")
+        + ("  npc_initiated=YES" if npc_initiated else "")
+        + ("  active_event=YES" if active_event else "")
         + (f"  icons={len(available_icons)}" if available_icons else "")
     )
     return prompt
@@ -573,7 +574,7 @@ async def dialogue(req: DialogueRequest):
         f"  learner → \"{req.message[:80]}{'…' if len(req.message) > 80 else ''}\"\n"
         f"  NPC    ← \"{reply[:120]}{'…' if len(reply) > 120 else ''}\"  (emotion={npc_emotion})"
         + (f"\n  TTS={'ok' if audio_base64 else 'skipped'}")
-        + (f"  session_complete=YES" if session_complete else "")
+        + ("  session_complete=YES" if session_complete else "")
     )
     return DialogueResponse(
         response=reply,
