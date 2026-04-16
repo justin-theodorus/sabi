@@ -48,9 +48,9 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="sabi-page items-center justify-center">
+    <div className="sabi-page items-center justify-center" style={{ background: 'var(--surface)' }}>
       <div className="sabi-centered">
-        <Image src={logo} alt="SABI" height={68} priority className="mb-3" />
+        <Image src={logo} alt="SABI" height={240} priority className="mb-3" />
         <p
           className="text-sm mb-10 text-center"
           style={{ color: "var(--color-text-secondary)" }}
@@ -115,29 +115,6 @@ export default function AuthPage() {
         ) : (
           /* ── Screen 2: sign-in form ── */
           <form onSubmit={handleSignIn} className="w-full flex flex-col gap-3">
-            <button
-              type="button"
-              className="sabi-back mb-1"
-              onClick={() => {
-                setScreen("role");
-                setError(null);
-              }}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              Back
-            </button>
-
             <input
               className="sabi-input"
               type="email"
@@ -168,7 +145,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={loading}
-              className="sabi-btn-accent mt-1"
+              className="sabi-btn-primary mt-1"
             >
               {loading ? "…" : "Sign in"}
             </button>

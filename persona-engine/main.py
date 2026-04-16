@@ -84,6 +84,13 @@ async def health():
 @app.post("/classify", response_model=ClassifyResponse)
 async def classify(metrics: SessionMetrics):
     persona, reason = classify_persona(metrics)
+    print(
+        f"[persona] CLASSIFIED → {persona}\n"
+        f"  avg_latency={metrics.avg_response_latency_ms:.0f}ms  "
+        f"re_prompts={metrics.re_prompt_count}  "
+        f"avg_icons={metrics.avg_icons_per_message:.1f}\n"
+        f"  reason: {reason}"
+    )
     return ClassifyResponse(persona=persona, reason=reason)
 
 
@@ -103,6 +110,7 @@ async def get_profile(user_id: str):
 
 @app.put("/profile/{user_id}")
 async def update_profile(user_id: str, req: ProfileUpdateRequest):
+    print(f"[persona] STORING profile for user={user_id[:8]}… → persona={req.persona}")
     valid_personas = {
         PERSONA_SHY_CHICK,
         PERSONA_STEADY_TURTLE,

@@ -1,511 +1,212 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import dynamic from 'next/dynamic'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { sendDialogue, judgeResponse, type Message } from '@/lib/dialogue'
-import { summarizeEmotionLog } from '@/lib/emotion-summary'
-import { translateIcons } from '@/lib/aac-translate'
-import { startSession, endSession, logEvent } from '@/lib/session'
-import { uploadSessionVideo } from '@/lib/minio-upload'
-import { SCENARIOS } from '@/lib/scenarios'
-import { useWebcam } from '@/hooks/useWebcam'
-import { useEmotionCapture } from '@/hooks/useEmotionCapture'
-import ScenarioStage from '@/components/ScenarioStage'
-import AACBoard, { type AACIcon } from '@/components/AACBoard'
-import MessageBar from '@/components/MessageBar'
-import HeartsBar from '@/components/HeartsBar'
-import SabiHintBar from '@/components/SabiHintBar'
+import { SCENARIO_LIST } from '@/lib/scenarios'
+import { LearnerBottomNav } from '@/components/LearnerNav'
 
-// Dynamic import avoids SSR crash from MediaPipe browser APIs
-const WebcamOverlay = dynamic(() => import('@/components/WebcamOverlay'), { ssr: false })
+const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
-const SURVIVAL_TIMEOUT_MS = 30_000
-const MAX_HEARTS = 5
-
-// Default to hawker centre; can be extended to read from sessionStorage/URL params
-const scenario = SCENARIOS.hawker_centre
-
-function playAudio(base64: string) {
-  try {
-    const audio = new Audio(`data:audio/mp3;base64,${base64}`)
-    audio.play().catch(() => {})
-  } catch {}
+interface SessionRecord {
+  id: string
+  scenario_id: string
+  mode: string
+  status: string
+  duration_seconds: number | null
+  hearts_remaining: number | null
+  started_at: string
 }
 
-/**
- * Reads moodAnswers from sessionStorage (written by mood/page.tsx) and maps
- * them to a concise NPC tone instruction injected into the dialogue system prompt.
- */
-function buildMoodModifier(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = sessionStorage.getItem('moodAnswers')
-    if (!raw) return null
-    const answers: Record<string, string> = JSON.parse(raw)
-
-    const parts: string[] = ['Adjust your tone based on the learner\'s current state:']
-
-    const moodMap: Record<string, string> = {
-      'Happy':   'The learner is happy and upbeat — match their energy with warmth and enthusiasm.',
-      'Okay':    'The learner is in a neutral mood — keep your tone steady and supportive.',
-      'Tired':   'The learner is feeling tired — be extra patient, keep responses brief and low-pressure.',
-      'Nervous': 'The learner is feeling nervous — be especially gentle, reassuring, and encouraging.',
-    }
-    if (answers.mood && moodMap[answers.mood]) parts.push(moodMap[answers.mood])
-
-    const energyMap: Record<string, string> = {
-      'I want to try everything, even if I fail!':              'They are eager to experiment — encourage all attempts even if imperfect.',
-      "I'd prefer to get it right the first time; let's go slow.": 'They prefer a careful, slow pace — do not rush them.',
-      'Mistakes are just obstacles to smash through!':          'They have a bold, resilient attitude — keep the energy high.',
-    }
-    if (answers.energy && energyMap[answers.energy]) parts.push(energyMap[answers.energy])
-
-    const volumeMap: Record<string, string> = {
-      "I'm ready to shout the answers!":          'They are highly engaged and participative today.',
-      "I'd rather just observe and type quietly.": 'They prefer a quieter pace — give them extra time to respond.',
-      "I'm here for a deep, serious discussion.":  'They are in a focused, serious mood — match that gravitas.',
-    }
-    if (answers.volume && volumeMap[answers.volume]) parts.push(volumeMap[answers.volume])
-
-    const vibeMap: Record<string, string> = {
-      'Exploring and playing around.':      'They want a playful, exploratory session — keep it light and fun.',
-      'Deep focus and mastery.':            'They want focused, meaningful practice — be precise and purposeful.',
-      'Just getting through it comfortably': 'They want a comfortable, low-stress session — be warm and easy-going.',
-    }
-    if (answers.vibe && vibeMap[answers.vibe]) parts.push(vibeMap[answers.vibe])
-
-    return parts.length > 1 ? parts.join(' ') : null
-  } catch {
-    return null
-  }
+interface ScenarioStats {
+  total: number
+  learning: number
+  survival: number
+  bestHearts: number | null
+  lastPlayed: string | null
+  pct: number
 }
 
-export default function PracticePage() {
+function computeStats(sessions: SessionRecord[], scenarioId: string): ScenarioStats {
+  const mine = sessions.filter((s) => s.scenario_id === scenarioId && s.status === 'completed')
+  if (mine.length === 0) return { total: 0, learning: 0, survival: 0, bestHearts: null, lastPlayed: null, pct: 0 }
+  const learning  = mine.filter((s) => s.mode === 'learning').length
+  const survival  = mine.filter((s) => s.mode === 'survival').length
+  const hearts    = mine.filter((s) => s.mode === 'survival' && s.hearts_remaining !== null)
+  const bestHearts = hearts.length ? Math.max(...hearts.map((s) => s.hearts_remaining!)) : null
+  const sorted = [...mine].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+  const lastPlayed = sorted[0]?.started_at ?? null
+  const pct = Math.min(100, mine.length * 20)
+  return { total: mine.length, learning, survival, bestHearts, lastPlayed, pct }
+}
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7)  return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
+}
+
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? 'var(--pink)' : '#E0E0E4'}>
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.54L12 21.35z" />
+    </svg>
+  )
+}
+
+const KNOWN_SCENARIOS = ['hawker_centre', 'group_project', 'queue_shop']
+
+export default function PracticeHubPage() {
   const router = useRouter()
-
-  // Auth
   const [authChecked, setAuthChecked] = useState(false)
-  const [authToken, setAuthToken] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [persona, setPersona] = useState<string>('guided_learner')
-
-  // Session
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [mode] = useState<'learning' | 'survival'>('learning')
-  const [moodModifier] = useState<string | null>(() => buildMoodModifier())
-
-  // Gameplay state
-  const [selectedIcons, setSelectedIcons] = useState<AACIcon[]>([])
-  const [npcResponse, setNpcResponse] = useState<string | null>(scenario.npcGreeting)
-  const [npcEmotion, setNpcEmotion] = useState<string | undefined>(undefined)
-  const [npcLoading, setNpcLoading] = useState(false)
-  const [history, setHistory] = useState<Message[]>([])
-  const [hearts, setHearts] = useState(MAX_HEARTS)
-  const [sessionOver, setSessionOver] = useState(false)
-
-  // Webcam / recording
-  const [webcamActive, setWebcamActive] = useState(false)
-  const sessionStartTimeRef = useRef<number>(0)
-
-  // Metrics for persona classification
-  const messageStartTimeRef = useRef<number | null>(null)
-  const latencySamplesRef = useRef<number[]>([])
-  const iconCountSamplesRef = useRef<number[]>([])
-
-  // Survival timeout
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const { videoRef, canvasRef, captureFrameRef, startWebcam, stopWebcam, captureFrame, startRecording, stopRecording } =
-    useWebcam()
-
-  const { currentEmotion, getEmotionLog, resetEmotionLog } = useEmotionCapture({
-    sessionId,
-    token: authToken,
-    sessionStartTime: sessionStartTimeRef.current,
-    captureFrame,
-    enabled: !sessionOver && webcamActive,
-  })
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  const [authToken, setAuthToken]     = useState<string | null>(null)
+  const [sessions, setSessions]       = useState<SessionRecord[]>([])
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        router.push('/')
-        return
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { router.push('/'); return }
       setAuthToken(session.access_token)
-      setUserId(session.user.id)
-
-      const { data } = await supabase
-        .from('learner_profiles')
-        .select('persona')
-        .eq('user_id', session.user.id)
-        .single()
-      if (data?.persona) setPersona(data.persona)
-
       setAuthChecked(true)
     })
   }, [router])
 
-  // ── Session start ─────────────────────────────────────────────────────────
-
   useEffect(() => {
-    if (!authChecked || !authToken) return
+    if (!authToken) return
+    fetch(`${SESSION_URL}/sessions`, { headers: { Authorization: `Bearer ${authToken}` } })
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setSessions(data) })
+      .catch(() => {})
+  }, [authToken])
 
-    async function init() {
-      try {
-        const id = await startSession(authToken!, scenario.id, mode, persona)
-        setSessionId(id)
-      } catch {
-        // Continue without session logging if service unavailable
-      }
-
-      sessionStartTimeRef.current = Date.now()
-      messageStartTimeRef.current = Date.now()
-      const camOk = await startWebcam()
-      if (camOk) {
-        startRecording()
-        setWebcamActive(true)
-      }
-
-      if (mode === 'survival') startSurvivalTimer()
+  function startSession(scenarioId: string, mode: 'learning' | 'survival') {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('selectedScenario', scenarioId)
+      sessionStorage.setItem('selectedMode', mode)
     }
-
-    init()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authChecked])
-
-  // ── Survival timer ────────────────────────────────────────────────────────
-
-  const deductHeart = useCallback(async (reason: 'timeout' | 'off_context') => {
-    setHearts((prev) => {
-      const next = prev - 1
-      if (next <= 0) endSessionFlow(0)
-      return next
-    })
-    if (sessionId && authToken) {
-      await logEvent(authToken, sessionId, 'heart_lost', { reason })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, authToken])
-
-  function startSurvivalTimer() {
-    clearSurvivalTimer()
-    timeoutRef.current = setTimeout(() => deductHeart('timeout'), SURVIVAL_TIMEOUT_MS)
+    router.push('/learner/mood')
   }
-
-  function clearSurvivalTimer() {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-  }
-
-  useEffect(() => () => clearSurvivalTimer(), [])
-
-  // ── Session end ───────────────────────────────────────────────────────────
-
-  async function endSessionFlow(finalHearts: number) {
-    clearSurvivalTimer()
-    setSessionOver(true)
-
-    stopWebcam()
-    setWebcamActive(false)
-
-    if (sessionId && authToken) {
-      stopRecording().then(async (blob) => {
-        if (blob) await uploadSessionVideo(authToken!, sessionId!, blob)
-      }).catch(() => {})
-
-      await endSession(authToken, sessionId, finalHearts)
-    }
-
-    // Post-session persona classification
-    if (userId && latencySamplesRef.current.length > 0) {
-      const avg_latency =
-        latencySamplesRef.current.reduce((a, b) => a + b, 0) / latencySamplesRef.current.length
-      const avg_icons =
-        iconCountSamplesRef.current.length > 0
-          ? iconCountSamplesRef.current.reduce((a, b) => a + b, 0) / iconCountSamplesRef.current.length
-          : 2
-
-      try {
-        const personaRes = await fetch(
-          (process.env.NEXT_PUBLIC_PERSONA_URL || 'http://localhost:8002') + '/classify',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              avg_response_latency_ms: avg_latency,
-              re_prompt_count: 0,
-              avg_icons_per_message: avg_icons,
-            }),
-          }
-        )
-        if (personaRes.ok) {
-          const { persona: newPersona } = await personaRes.json()
-          setPersona(newPersona)
-          await fetch(
-            (process.env.NEXT_PUBLIC_PERSONA_URL || 'http://localhost:8002') + `/profile/${userId}`,
-            {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ persona: newPersona, avg_response_latency_ms: avg_latency }),
-            }
-          )
-        }
-      } catch {}
-    }
-  }
-
-  // ── Icon selection ────────────────────────────────────────────────────────
-
-  function handleIconSelect(icon: AACIcon) {
-    setSelectedIcons((prev) => [...prev, icon])
-  }
-
-  function handleRemoveIcon(index: number) {
-    setSelectedIcons((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  function handleClear() {
-    setSelectedIcons([])
-  }
-
-  // ── Submit ────────────────────────────────────────────────────────────────
-
-  async function handleSubmit() {
-    if (selectedIcons.length === 0 || npcLoading || sessionOver) return
-
-    clearSurvivalTimer()
-
-    const iconsUsed = [...selectedIcons]
-    iconCountSamplesRef.current.push(iconsUsed.length)
-
-    if (messageStartTimeRef.current !== null) {
-      latencySamplesRef.current.push(Date.now() - messageStartTimeRef.current)
-    }
-
-    const message = await translateIcons(iconsUsed.map((i) => i.label))
-
-    setSelectedIcons([])
-    setNpcLoading(true)
-    setNpcResponse(null)
-
-    if (sessionId && authToken) {
-      logEvent(authToken, sessionId, 'icon_selection', {
-        icons: iconsUsed.map((i) => i.label),
-        translated: message,
-      })
-    }
-
-    try {
-      if (mode === 'survival' && history.length > 0) {
-        const lastNpc = history.findLast((m) => m.role === 'assistant')?.content ?? ''
-        const offContext = await judgeResponse(scenario.id, lastNpc, message)
-        if (offContext) {
-          await deductHeart('off_context')
-          if (hearts - 1 <= 0) {
-            setNpcLoading(false)
-            return
-          }
-        }
-      }
-
-      // Get and summarize emotions since last response
-      const emotionLog = getEmotionLog()
-      const emotionSummary = await summarizeEmotionLog(emotionLog)
-
-      const result = await sendDialogue(message, history, {
-        scenario_id: scenario.id,
-        mode,
-        persona,
-        mood_modifier: moodModifier ?? undefined,
-        emotion: emotionSummary ? {
-          summary_emotion: emotionSummary.summary_emotion,
-          explanation: emotionSummary.explanation,
-          avg_score: emotionSummary.avg_score,
-        } : undefined,
-      })
-
-      // Reset emotion log for next response cycle
-      resetEmotionLog()
-
-      const newHistory: Message[] = [
-        ...history,
-        { role: 'user', content: message },
-        { role: 'assistant', content: result.response },
-      ]
-      setHistory(newHistory)
-      setNpcResponse(result.response)
-      setNpcEmotion(result.npc_emotion)
-      messageStartTimeRef.current = Date.now()
-
-      if (result.audio_base64) playAudio(result.audio_base64)
-
-      if (sessionId && authToken) {
-        logEvent(authToken, sessionId, 'npc_response', { content: result.response })
-      }
-
-      if (mode === 'survival' && hearts > 0) startSurvivalTimer()
-    } catch (err) {
-      console.error('Dialogue error:', err)
-      setNpcResponse("Sorry, I didn't catch that. Could you try again?")
-      if (mode === 'survival') startSurvivalTimer()
-    } finally {
-      setNpcLoading(false)
-    }
-  }
-
-  // ── Sign out ──────────────────────────────────────────────────────────────
-
-  async function handleSignOut() {
-    clearSurvivalTimer()
-    if (sessionId && authToken && !sessionOver) await endSession(authToken, sessionId, hearts)
-    await supabase.auth.signOut()
-    router.push('/')
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-white text-xl">Loading…</div>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontFamily: 'var(--font)', color: 'var(--text-muted)', fontSize: '15px', fontWeight: 600 }}>
+        Loading…
       </div>
     )
   }
 
-  if (sessionOver) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 gap-6 px-6">
-        <div className="text-center">
-          <div className="text-5xl mb-4">{hearts > 0 ? '🎉' : '💔'}</div>
-          <h2 className="text-white text-2xl font-bold mb-2">
-            {hearts > 0 ? 'Session Complete!' : 'No hearts left!'}
-          </h2>
-          <p className="text-gray-400 text-sm">
-            {hearts > 0
-              ? `Great job! You completed the ${scenario.title} scenario.`
-              : 'Better luck next time! Keep practising.'}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => router.push('/learner/home')}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium transition-colors"
-          >
-            Back to Home
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const scenariosToShow = SCENARIO_LIST.filter((s) => KNOWN_SCENARIOS.includes(s.id))
 
   return (
-    <div className="h-screen w-screen bg-gray-100 flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/learner/home')}
-            className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            <span className="text-sm font-medium">Home</span>
-          </button>
-          <div className="w-px h-5 bg-gray-200" />
-          <div>
-            <h1 className="text-gray-900 font-semibold text-sm">{scenario.title}</h1>
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${mode === 'learning' ? 'bg-green-400' : 'bg-rose-400'}`} />
-              <p className={`text-xs font-medium ${mode === 'learning' ? 'text-green-500' : 'text-rose-500'}`}>
-                {mode === 'learning' ? 'Learning Mode' : 'Survival Mode'}
-              </p>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
+      <div style={{ maxWidth: '768px', margin: '0 auto', width: '100%', padding: '28px 24px 0' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>Practice</h1>
+        <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '4px' }}>Choose a scenario and mode.</p>
+      </div>
+
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-h) + 32px)' }}>
+      <div style={{ maxWidth: '768px', margin: '0 auto', width: '100%', padding: '16px 24px 0' }}>
+
+        {/* Mode info tiles */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+          {/* Learning tile */}
+          <div style={{ background: '#f0faf3', border: '1.5px solid var(--green)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#c8ecd4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="#1a6e35" strokeWidth="1.6" />
+                <path d="M7 8h10M7 12h10M7 16h6" stroke="#1a6e35" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: '18px', fontWeight: 800, color: 'var(--green)', letterSpacing: '-0.2px' }}>Learning</p>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Hints · No timer</p>
+            </div>
+          </div>
+
+          {/* Survival tile */}
+          <div style={{ background: '#fff5f6', border: '1.5px solid var(--pink)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ffd6da', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L15 9h7L16.5 14l2 7L12 17l-6.5 4 2-7L2 9h7L12 2z" stroke="#c0394a" strokeWidth="1.5" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: '18px', fontWeight: 800, color: 'var(--pink)', letterSpacing: '-0.2px' }}>Survival</p>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>5 hearts · Timer</p>
+              <div style={{ display: 'flex', gap: '3px', marginTop: '6px' }}>
+                {Array.from({ length: 5 }).map((_, i) => <HeartIcon key={i} filled />)}
+              </div>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {mode === 'survival' && <HeartsBar hearts={hearts} />}
-          <button
-            onClick={() => endSessionFlow(hearts)}
-            className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition-colors font-medium"
-          >
-            End Session
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="text-gray-500 hover:text-gray-900 text-sm transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex gap-3 p-3 overflow-hidden">
-        {/* Left: Scenario Stage + Hint Bar */}
-        <div className="w-[45%] flex-shrink-0 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 relative">
-            <ScenarioStage
-              npcResponse={npcResponse}
-              npcLoading={npcLoading}
-              backgroundSrc={scenario.background}
-              npcSrc={scenario.npc}
-              npcEmotion={npcEmotion}
-            />
-            {/* Webcam overlay — top-right corner of scenario panel */}
-            <div className="absolute top-2 right-2 z-10">
-              <WebcamOverlay
-                videoRef={videoRef}
-                canvasRef={canvasRef}
-                currentEmotion={currentEmotion}
-                webcamActive={webcamActive}
-              />
+        {/* Scenario cards */}
+        <h2 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '16px' }}>Choose a Scenario</h2>
+
+        <div>
+          {scenariosToShow.map((scenario) => {
+            const stats = computeStats(sessions, scenario.id)
+            return (
+              <div key={scenario.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', marginBottom: '12px' }}>
+                <p style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)' }}>{scenario.title}</p>
+                <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '4px' }}>{scenario.description}</p>
+                <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {stats.total > 0
+                    ? `${stats.total} session${stats.total !== 1 ? 's' : ''}${stats.lastPlayed ? ` · Last: ${formatRelative(stats.lastPlayed)}` : ''}`
+                    : 'No sessions yet'}
+                </p>
+
+                {/* Progress bar */}
+                <div style={{ height: '6px', background: 'var(--surface-sub)', borderRadius: '99px', margin: '12px 0', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--green)', borderRadius: '99px', width: `${stats.pct}%`, transition: 'width 0.7s' }} />
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button onClick={() => startSession(scenario.id, 'learning')}
+                    style={{ flex: 1, height: '48px', borderRadius: '12px', background: '#e6f4ea', color: '#1a6e35', border: '1px solid #a8d5b5', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="#1a6e35" strokeWidth="1.4" />
+                      <path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h4" stroke="#1a6e35" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
+                    Learning
+                  </button>
+                  <button onClick={() => startSession(scenario.id, 'survival')}
+                    style={{ flex: 1, height: '48px', borderRadius: '12px', background: '#ffeef1', color: '#c0394a', border: '1px solid #ffb3bd', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1.5L9.8 6H14.5l-3.8 2.8 1.5 4.5L8 10.5l-4.2 2.8 1.5-4.5L1.5 6H6.2L8 1.5z" stroke="#c0394a" strokeWidth="1.3" strokeLinejoin="round" />
+                    </svg>
+                    Survival
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Coming soon */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px', opacity: 0.45 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <p style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>Playground</p>
+              <span className="badge-neutral">Coming Soon</span>
             </div>
-          </div>
-          {mode === 'learning' && (
-            <SabiHintBar
-              scenarioId={scenario.id}
-              npcLastMessage={npcResponse}
-              visible={!npcLoading && !!npcResponse}
-            />
-          )}
-        </div>
-
-        {/* Right: AAC Board + Message Bar */}
-        <div className="flex-1 flex flex-col gap-3 min-h-0">
-          <div className="flex-1 min-h-0">
-            <AACBoard
-              onIconSelect={handleIconSelect}
-              selectedIds={selectedIcons.map((i) => i.id)}
-            />
-          </div>
-          <div className="flex-shrink-0">
-            <MessageBar
-              selectedIcons={selectedIcons}
-              onRemove={handleRemoveIcon}
-              onClear={handleClear}
-              onSubmit={handleSubmit}
-              loading={npcLoading}
-            />
+            <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Play with friends</p>
+            <div style={{ height: '6px', background: 'var(--surface-sub)', borderRadius: '99px', margin: '12px 0' }} />
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1, height: '48px', borderRadius: '12px', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
+                Learning
+              </div>
+              <div style={{ flex: 1, height: '48px', borderRadius: '12px', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
+                Survival
+              </div>
+            </div>
           </div>
         </div>
       </div>
+      </main>
 
-      {/* Hidden canvas for JPEG frame capture */}
-      <canvas ref={captureFrameRef} className="hidden" aria-hidden="true" />
+      <LearnerBottomNav />
     </div>
   )
 }

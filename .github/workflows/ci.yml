@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main, justin]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── TypeScript type check ────────────────────────────────────────────────────
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+        name: Type check
+
+  # ── Python lint ──────────────────────────────────────────────────────────────
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: |
+          ruff check dialogue-engine/main.py
+          ruff check persona-engine/main.py
+          ruff check expression-service/main.py
+        name: Ruff lint
+
+  # ── Build Docker images ──────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - frontend
+          - dialogue-engine
+          - persona-engine
+          - expression-service
+          - session-service
+          - aac-icon-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: false
+          tags: sabi/${{ matrix.service }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Integration health check ─────────────────────────────────────────────────
+  # Spins up the full stack and confirms every service responds on /health.
+  # Skips expression-service (DeepFace model download is too slow for CI).
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create stub .env
+        run: |
+          cat > .env <<'EOF'
+          ANTHROPIC_API_KEY=stub
+          ELEVENLABS_API_KEY=stub
+          SUPABASE_URL=https://stub.supabase.co
+          SUPABASE_PUBLISHABLE_KEY=stub
+          SUPABASE_SECRET_KEY=stub
+          EOF
+
+      - name: Start services (excluding expression-service)
+        run: |
+          docker compose up -d \
+            redis minio \
+            dialogue-engine dialogue-queue-api persona-engine session-service aac-icon-service
+        env:
+          COMPOSE_FILE: docker-compose.yml
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting up to 60s for services..."
+          # dialogue-engine (8001) is internal-only — not exposed on host.
+          # dialogue-queue-api (8006) is the public-facing entry point for dialogue.
+          for port in 8006 8002 8004 8005; do
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:$port/health > /dev/null 2>&1; then
+                echo "  Port $port ✓"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "  Port $port timed out"
+                docker compose logs
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Verify health endpoints
+        run: |
+          echo "dialogue-queue-api:"
+          curl -sf http://localhost:8006/health | jq .
+
+          echo "persona-engine:"
+          curl -sf http://localhost:8002/health | jq .
+
+          echo "session-service:"
+          curl -sf http://localhost:8004/health | jq .
+
+          echo "aac-icon-service:"
+          curl -sf http://localhost:8005/health | jq .
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

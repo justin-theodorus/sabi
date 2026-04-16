@@ -43,7 +43,7 @@ export default function WebcamOverlay({
         const { FaceMesh } = await import('@mediapipe/face_mesh')
         const { Camera } = await import('@mediapipe/camera_utils')
         const { drawConnectors } = await import('@mediapipe/drawing_utils')
-        // @ts-expect-error — mediapipe types don't export FACEMESH_TESSELATION cleanly
+        // @ts-ignore — mediapipe types don't export FACEMESH_TESSELATION cleanly
         const { FACEMESH_TESSELATION } = await import('@mediapipe/face_mesh')
 
         const faceMesh = new FaceMesh({

@@ -3,17 +3,14 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import {
-  RadarChart, PolarGrid, PolarAngleAxis, Radar,
-  BarChart, Bar, XAxis, YAxis, Cell,
-  ResponsiveContainer, Tooltip,
-} from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { SCENARIOS } from '@/lib/scenarios'
+import { CommunicationRadar } from '@/components/CommunicationRadar'
+import { TherapistBottomNav } from '@/components/TherapistSidebar'
 
 const DIALOGUE_URL = process.env.NEXT_PUBLIC_DIALOGUE_URL || 'http://localhost:8001'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+const SESSION_URL = process.env.NEXT_PUBLIC_SESSION_URL || 'http://localhost:8004'
 
 interface Session {
   id: string
@@ -55,22 +52,25 @@ interface SessionEvent {
   timestamp: string
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const EMOTION_EMOJI: Record<string, string> = {
-  happy: '😊', sad: '😢', angry: '😠',
-  fear: '😨', surprise: '😲', disgust: '🤢', neutral: '😐',
-}
-
 const EMOTION_COLOR: Record<string, string> = {
-  happy: '#4ade80', sad: '#60a5fa', angry: '#f87171',
-  fear: '#c084fc', surprise: '#fbbf24', disgust: '#a3e635', neutral: '#94a3b8',
+  happy:    '#4ade80',
+  sad:      '#60a5fa',
+  angry:    '#f87171',
+  fear:     '#c084fc',
+  surprise: '#fbbf24',
+  disgust:  '#a3e635',
+  neutral:  '#94a3b8',
 }
 
 const PERSONA_LABELS: Record<string, string> = {
-  guided_learner: 'Guided Learner',
-  social_practice_learner: 'Social Practice',
+  guided_learner:           'Guided Learner',
+  social_practice_learner:  'Social Practice',
   independent_communicator: 'Independent Communicator',
+  garang_crab:              'Garang Crab',
+  shy_chick:                'Shy Chick',
+  zippy_sotong:             'Zippy Sotong',
+  curious_monkey:           'Curious Monkey',
+  steady_turtle:            'Steady Turtle',
 }
 
 function formatDuration(s: number | null): string {
@@ -85,75 +85,50 @@ function formatDate(iso: string): string {
   })
 }
 
-function formatOffset(ms: number): string {
-  const s = Math.floor(ms / 1000)
-  const m = Math.floor(s / 60)
-  return `${m}:${String(s % 60).padStart(2, '0')}`
-}
-
 function buildEmotionSummary(events: EmotionEvent[]): string {
   if (events.length === 0) return 'No emotion data'
   const counts: Record<string, number> = {}
-  for (const e of events) {
-    counts[e.dominant_emotion] = (counts[e.dominant_emotion] ?? 0) + 1
-  }
+  for (const e of events) counts[e.dominant_emotion] = (counts[e.dominant_emotion] ?? 0) + 1
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
     .map(([emo, n]) => `${emo} ${Math.round((n / events.length) * 100)}%`)
     .join(', ')
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 function EmotionBarChart({ events }: { events: EmotionEvent[] }) {
-  // Tally counts per emotion and convert to sorted percentage data
   const counts: Record<string, number> = {}
-  for (const e of events) {
-    counts[e.dominant_emotion] = (counts[e.dominant_emotion] ?? 0) + 1
-  }
+  for (const e of events) counts[e.dominant_emotion] = (counts[e.dominant_emotion] ?? 0) + 1
   const data = Object.entries(counts)
     .map(([emotion, count]) => ({
       emotion,
-      pct: Math.round((count / events.length) * 100),
-      emoji: EMOTION_EMOJI[emotion] ?? '',
-      color: EMOTION_COLOR[emotion] ?? '#6b7280',
+      pct:   Math.round((count / events.length) * 100),
+      color: EMOTION_COLOR[emotion] ?? '#767676',
     }))
     .sort((a, b) => b.pct - a.pct)
 
-  const CustomLabel = ({ x, y, width, value, index }: any) => {
-    const item = data[index]
-    return (
-      <text x={x + width + 8} y={y + 11} fill="#e5e7eb" fontSize={13} dominantBaseline="middle">
-        {item.emoji} {value}%
-      </text>
-    )
-  }
-
   return (
     <ResponsiveContainer width="100%" height={data.length * 44}>
-      <BarChart
-        data={data}
-        layout="vertical"
-        margin={{ top: 0, right: 72, left: 8, bottom: 0 }}
-        barCategoryGap="30%"
-      >
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 72, left: 8, bottom: 0 }} barCategoryGap="30%">
         <XAxis type="number" domain={[0, 100]} hide />
-        <YAxis
-          type="category"
-          dataKey="emotion"
-          width={72}
-          tick={({ x, y, payload, index }: any) => (
-            <text x={x} y={y} textAnchor="end" fill="#9ca3af" fontSize={13} dominantBaseline="middle">
-              {data[index]?.emoji} {payload.value}
+        <YAxis type="category" dataKey="emotion" width={72}
+          tick={({ x, y, payload }: any) => (
+            <text x={x} y={y} textAnchor="end" fill="var(--text-secondary)" fontSize={13} dominantBaseline="middle">
+              {payload.value}
             </text>
           )}
         />
         <Tooltip
-          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-          contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8 }}
+          cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+          contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px' }}
           formatter={(v: number) => [`${v}%`, 'Share of session']}
         />
-        <Bar dataKey="pct" radius={[0, 4, 4, 0]} label={<CustomLabel />}>
+        <Bar dataKey="pct" radius={[0, 4, 4, 0]}
+          label={({ x, y, width, value }: any) => (
+            <text x={x + width + 8} y={y + 11} fill="var(--text-secondary)" fontSize={13} dominantBaseline="middle">
+              {value}%
+            </text>
+          )}
+        >
           {data.map((entry) => (
             <Cell key={entry.emotion} fill={entry.color} />
           ))}
@@ -163,56 +138,76 @@ function EmotionBarChart({ events }: { events: EmotionEvent[] }) {
   )
 }
 
+function YesNoBadge({ value, label }: { value: boolean; label: string }) {
+  return (
+    <div style={{ background: value ? '#f0faf3' : '#fff5f6', borderRadius: '16px', padding: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: value ? 'var(--green)' : 'var(--pink)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {value ? (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 5l2 2 4-4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M7 3L3 7M3 3l4 4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          )}
+        </div>
+        <span style={{ fontSize: '15px', fontWeight: 800, color: value ? 'var(--green)' : 'var(--pink)' }}>
+          {value ? 'Yes' : 'No'}
+        </span>
+      </div>
+      <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>{label}</div>
+    </div>
+  )
+}
+
 export default function SessionReportPage() {
   const router = useRouter()
   const { sessionId } = useParams<{ sessionId: string }>()
 
-  const [authToken, setAuthToken] = useState<string | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [authToken, setAuthToken]         = useState<string | null>(null)
+  const [session, setSession]             = useState<Session | null>(null)
+  const [learnerName, setLearnerName]     = useState<string>('Unknown')
   const [emotionEvents, setEmotionEvents] = useState<EmotionEvent[]>([])
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([])
-  const [scoring, setScoring] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // ── Auth + fetch data ────────────────────────────────────────────────────
+  const [heartEvents, setHeartEvents]     = useState<SessionEvent[]>([])
+  const [scoring, setScoring]             = useState(false)
+  const [error, setError]                 = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session: authSession } }) => {
       if (!authSession) { router.push('/'); return }
-      const role = authSession.user.user_metadata?.role
-      if (role !== 'therapist') { router.push('/learner'); return }
+      if (authSession.user.user_metadata?.role !== 'therapist') { router.push('/learner'); return }
       setAuthToken(authSession.access_token)
     })
   }, [router])
 
   const fetchData = useCallback(async () => {
     if (!sessionId) return
-    const [sessionRes, emotionRes, eventsRes] = await Promise.all([
+    const [sessionRes, emotionRes, eventsRes, heartRes] = await Promise.all([
       supabase.from('sessions').select('*').eq('id', sessionId).single(),
-      supabase
-        .from('emotion_events')
-        .select('id, session_offset_ms, dominant_emotion, scores, created_at')
-        .eq('session_id', sessionId)
-        .order('session_offset_ms', { ascending: true }),
-      supabase
-        .from('session_events')
-        .select('id, event_type, payload, timestamp')
-        .eq('session_id', sessionId)
-        .in('event_type', ['icon_selection', 'npc_response'])
-        .order('timestamp', { ascending: true }),
+      supabase.from('emotion_events').select('id, session_offset_ms, dominant_emotion, scores, created_at').eq('session_id', sessionId).order('session_offset_ms', { ascending: true }),
+      supabase.from('session_events').select('id, event_type, payload, timestamp').eq('session_id', sessionId).in('event_type', ['icon_selection', 'npc_response']).order('timestamp', { ascending: true }),
+      supabase.from('session_events').select('id, event_type, payload, timestamp').eq('session_id', sessionId).eq('event_type', 'heart_lost').order('timestamp', { ascending: true }),
     ])
-
     if (sessionRes.error) { setError(sessionRes.error.message); return }
-    setSession(sessionRes.data as Session)
+    const s = sessionRes.data as Session
+    setSession(s)
     setEmotionEvents((emotionRes.data ?? []) as EmotionEvent[])
     setSessionEvents((eventsRes.data ?? []) as SessionEvent[])
+    setHeartEvents((heartRes.data ?? []) as SessionEvent[])
+
+    // Fetch learner name
+    const { data: profile } = await supabase
+      .from('learner_profiles')
+      .select('name')
+      .eq('user_id', s.learner_id)
+      .single()
+    if (profile?.name) setLearnerName(profile.name)
   }, [sessionId])
 
-  useEffect(() => {
-    if (authToken) fetchData()
-  }, [authToken, fetchData])
-
-  // ── Lazy competence scoring ──────────────────────────────────────────────
+  useEffect(() => { if (authToken) fetchData() }, [authToken, fetchData])
 
   useEffect(() => {
     if (!session || session.competence_scores || !authToken || scoring) return
@@ -221,35 +216,21 @@ export default function SessionReportPage() {
     async function runScoring() {
       setScoring(true)
       try {
-        const transcript = sessionEvents!.map((e) => ({
-          role: e.event_type === 'icon_selection' ? 'user' : 'assistant',
-          content:
-            e.event_type === 'icon_selection'
-              ? (e.payload.translated as string) ?? (e.payload.icons as string[])?.join(', ')
-              : (e.payload.content as string) ?? '',
+        const transcript = sessionEvents.map((e) => ({
+          role:    e.event_type === 'icon_selection' ? 'user' : 'assistant',
+          content: e.event_type === 'icon_selection'
+            ? (e.payload.translated as string) ?? (e.payload.icons as string[])?.join(', ')
+            : (e.payload.content as string) ?? '',
         }))
-
         const emotionSummary = buildEmotionSummary(emotionEvents)
-
         const res = await fetch(`${DIALOGUE_URL}/score-session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            transcript,
-            emotion_summary: emotionSummary,
-            scenario_id: session!.scenario_id,
-          }),
+          body: JSON.stringify({ transcript, emotion_summary: emotionSummary, scenario_id: session!.scenario_id }),
         })
-
         if (!res.ok) return
         const scores: CompetenceScores = await res.json()
-
-        // Cache scores + emotion summary back to Supabase
-        await supabase
-          .from('sessions')
-          .update({ competence_scores: scores, emotion_summary: emotionSummary })
-          .eq('id', session!.id)
-
+        await supabase.from('sessions').update({ competence_scores: scores, emotion_summary: emotionSummary }).eq('id', session!.id)
         setSession((prev) => prev ? { ...prev, competence_scores: scores, emotion_summary: emotionSummary } : prev)
       } catch (err) {
         console.warn('[SessionReport] Scoring error:', err)
@@ -257,163 +238,275 @@ export default function SessionReportPage() {
         setScoring(false)
       }
     }
-
     runScoring()
   }, [session, sessionEvents, emotionEvents, authToken, scoring])
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-red-400">
-        Error: {error}
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <div style={{ color: '#c0394a', fontWeight: 600 }}>Error: {error}</div>
       </div>
     )
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
-        Loading…
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <div style={{ color: 'var(--blue)', fontSize: '18px', fontWeight: 700 }}>Loading…</div>
       </div>
     )
   }
 
   const scenarioName = SCENARIOS[session.scenario_id]?.title ?? session.scenario_id
-  const scores = session.competence_scores
+  const scores       = session.competence_scores
+  const isSurvival   = session.mode === 'survival'
 
-  const radarData = scores
-    ? [
-        { dimension: 'Operational', value: scores.operational },
-        { dimension: 'Linguistic', value: scores.linguistic },
-        { dimension: 'Social', value: scores.social },
-        { dimension: 'Strategic', value: scores.strategic },
-        { dimension: 'Confidence', value: scores.confidence },
-      ]
-    : []
+  // Computed metrics
+  const iconSelectionEvents = sessionEvents.filter((e) => e.event_type === 'icon_selection')
+  const turns        = iconSelectionEvents.length
+  const reprompts    = heartEvents.length
+  const firstEvent   = sessionEvents[0]
+  const userInitiated = !!firstEvent && firstEvent.event_type === 'icon_selection'
+  const repairedMisunderstanding = heartEvents.length > 0 && heartEvents.some((hEvent) =>
+    sessionEvents.some((iEvent) =>
+      iEvent.event_type === 'icon_selection' &&
+      new Date(iEvent.timestamp) > new Date(hEvent.timestamp)
+    )
+  )
+
+  const radarData = scores ? [
+    { dimension: 'Operational', value: scores.operational },
+    { dimension: 'Linguistic',  value: scores.linguistic },
+    { dimension: 'Social',      value: scores.social },
+    { dimension: 'Strategic',   value: scores.strategic },
+    { dimension: 'Confidence',  value: scores.confidence },
+  ] : []
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="px-6 py-4 bg-gray-800 border-b border-gray-700 flex items-center gap-4">
-        <Link
-          href="/therapist/dashboard"
-          className="text-gray-400 hover:text-white text-sm transition-colors flex items-center gap-1"
-        >
-          ← Dashboard
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font)' }}>
+
+      {/* Breadcrumb */}
+      <div style={{ padding: '16px 32px', display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+        <Link href="/therapist/sessions"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: 600, textDecoration: 'none' }}
+          className="hover:text-gray-800">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Sessions
         </Link>
-        <div className="w-px h-5 bg-gray-600" />
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">S</span>
-          </div>
-          <h1 className="text-lg font-bold">Session Report</h1>
+        <div style={{ width: '1px', height: '16px', background: 'var(--border)' }} />
+        <div>
+          <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>Session report</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>{scenarioName} · {formatDate(session.started_at)}</span>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-h) + 32px)' }}>
+      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-        {/* Stats bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {[
-            { label: 'Scenario', value: scenarioName },
-            { label: 'Mode', value: session.mode === 'survival' ? '💀 Survival' : '📚 Learning' },
-            { label: 'Persona', value: PERSONA_LABELS[session.persona_at_time] ?? session.persona_at_time },
-            { label: 'Duration', value: formatDuration(session.duration_seconds) },
-            { label: 'Date', value: session.started_at ? formatDate(session.started_at) : '—' },
-          ].map(({ label, value }) => (
-            <div key={label} className="bg-gray-800 rounded-xl px-4 py-3 border border-gray-700">
-              <div className="text-xs text-gray-400 mb-1">{label}</div>
-              <div className="text-sm font-medium text-white truncate">{value}</div>
+        {/* Session hero card — with learner info */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px' }}>
+
+          {/* Learner info row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '16px', marginBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--surface-sub)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
+              {learnerName[0] ?? '?'}
             </div>
-          ))}
+            <div>
+              <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '2px' }}>{learnerName}</p>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Learner</p>
+            </div>
+          </div>
+
+          {/* Session info */}
+          <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', marginBottom: '4px', color: 'var(--text-primary)' }}>{scenarioName}</div>
+          <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            {formatDate(session.started_at)}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <span className={isSurvival ? 'badge-survival' : 'badge-learning'}>
+              {isSurvival ? 'Survival mode' : 'Learning mode'}
+            </span>
+            <span className="badge-neutral">
+              {PERSONA_LABELS[session.persona_at_time] ?? session.persona_at_time}
+            </span>
+          </div>
         </div>
 
-        {/* Competence Radar Chart */}
-        <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
-          <h2 className="text-base font-semibold mb-1">Communication Competence</h2>
-          {scoring && (
-            <p className="text-xs text-gray-400 mb-4">Scoring with AI… this may take a moment.</p>
+        {/* Performance Statistics */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '16px' }}>
+            Performance statistics
+          </h2>
+
+          {/* Stat tiles */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
+
+            {/* Time taken */}
+            <div style={{ background: 'var(--surface-sub)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(125,178,246,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <circle cx="7" cy="7" r="5.5" stroke="var(--blue)" strokeWidth="1.4" />
+                  <path d="M7 4v3l2 1.5" stroke="var(--blue)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: '2px' }}>
+                {formatDuration(session.duration_seconds)}
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Time taken</div>
+            </div>
+
+            {/* Turns */}
+            <div style={{ background: 'var(--surface-sub)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(47,176,90,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 7h10M9 4l3 3-3 3" stroke="var(--green)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: '2px' }}>
+                {turns}
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Turns taken</div>
+            </div>
+
+            {/* Re-prompts */}
+            <div style={{ background: reprompts > 0 ? '#fff5f6' : 'var(--surface-sub)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: reprompts > 0 ? 'rgba(255,147,161,.2)' : 'rgba(170,170,170,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M12 2L2 12M2 2l10 10" stroke={reprompts > 0 ? 'var(--pink)' : 'var(--text-muted)'} strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: reprompts > 0 ? 'var(--pink)' : 'var(--text-primary)', marginBottom: '2px' }}>
+                {reprompts}
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: reprompts > 0 ? 'var(--pink)' : 'var(--text-secondary)' }}>Re-prompts needed</div>
+            </div>
+
+            {/* Hearts (survival only) */}
+            {isSurvival && session.hearts_remaining !== null && (
+              <div style={{ background: '#ffeef1', borderRadius: '16px', padding: '16px' }}>
+                <div style={{ display: 'flex', gap: '3px', marginBottom: '8px' }}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i < session.hearts_remaining! ? 'var(--pink)' : 'rgba(192,57,74,.2)'}>
+                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.54L12 21.35z" />
+                    </svg>
+                  ))}
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.3px', color: '#c0394a', marginBottom: '2px' }}>
+                  {session.hearts_remaining}/5
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 500, color: '#c0394a' }}>Hearts remaining</div>
+              </div>
+            )}
+          </div>
+
+          {/* Yes/No behavioural metrics */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+            <YesNoBadge value={userInitiated} label="Initiated conversation" />
+            <YesNoBadge value={repairedMisunderstanding} label="Repaired misunderstanding" />
+          </div>
+
+          {/* Session recording */}
+          {session.video_url && (
+            <div style={{ marginTop: '16px' }}>
+              <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Session recording</p>
+              <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  src={`${SESSION_URL}/sessions/${sessionId}/video-stream`}
+                  preload="metadata"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  onLoadedMetadata={(e) => {
+                    // Seek to 1s to get a meaningful thumbnail frame
+                    const vid = e.currentTarget
+                    vid.currentTime = 1
+                  }}
+                />
+                <Link
+                  href={`/therapist/sessions/${sessionId}/recording`}
+                  style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)', textDecoration: 'none' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M5 3.5l10 5.5-10 5.5V3.5z" fill="#111" />
+                    </svg>
+                  </div>
+                </Link>
+              </div>
+              <Link
+                href={`/therapist/sessions/${sessionId}/recording`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '10px', fontSize: '13px', fontWeight: 700, color: 'var(--blue)', textDecoration: 'none' }}>
+                Open recording page →
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Communication competence radar */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)' }}>
+              Communication competence
+            </h2>
+            {scoring && (
+              <span style={{ fontSize: '12px', color: 'var(--blue)', fontWeight: 600, animation: 'pulse 1.5s infinite' }}>
+                Scoring with AI…
+              </span>
+            )}
+          </div>
+          {scores && (
+            <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
+              {scores.summary}
+            </p>
           )}
           {!scoring && !scores && sessionEvents.length === 0 && (
-            <p className="text-xs text-gray-500 mb-4">No session events found to score.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', padding: '16px 0' }}>No session events to score yet.</p>
           )}
           {scores && (
-            <>
-              <p className="text-xs text-gray-400 mb-4">{scores.summary}</p>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="#374151" />
-                    <PolarAngleAxis
-                      dataKey="dimension"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                    />
-                    <Radar
-                      name="Score"
-                      dataKey="value"
-                      stroke="#3b82f6"
-                      fill="#3b82f6"
-                      fillOpacity={0.3}
-                    />
-                    <Tooltip
-                      contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8 }}
-                      labelStyle={{ color: '#e5e7eb' }}
-                      formatter={(v: number) => [`${v.toFixed(0)}/100`, 'Score']}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-5 gap-2 mt-4">
-                {radarData.map(({ dimension, value }) => (
-                  <div key={dimension} className="text-center">
-                    <div className="text-xs text-gray-400">{dimension}</div>
-                    <div className="text-lg font-bold text-blue-400">{value.toFixed(0)}</div>
-                  </div>
-                ))}
-              </div>
-            </>
+            <CommunicationRadar scores={radarData} size={260} interactive />
           )}
         </div>
 
-        {/* Emotion Breakdown */}
+        {/* Emotion breakdown */}
         {emotionEvents.length > 0 && (
-          <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
-            <h2 className="text-base font-semibold mb-1">Emotion Breakdown</h2>
-            <p className="text-xs text-gray-400 mb-5">
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+              Emotion breakdown
+            </h2>
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '20px' }}>
               {emotionEvents.length} samples over {formatDuration(session.duration_seconds)}
             </p>
             <EmotionBarChart events={emotionEvents} />
           </div>
         )}
 
-        {/* Transcript */}
+        {/* Session transcript */}
         {sessionEvents.length > 0 && (
-          <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
-            <h2 className="text-base font-semibold mb-4">Session Transcript</h2>
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '22px', padding: '24px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.2px', color: 'var(--text-primary)', marginBottom: '16px' }}>
+              Session transcript
+            </h2>
+            <div style={{ maxHeight: '384px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {sessionEvents.map((e) => {
                 const isLearner = e.event_type === 'icon_selection'
                 const text = isLearner
-                  ? `${(e.payload.translated as string) ?? ''} ${
-                      (e.payload.icons as string[])?.map((i: string) => `[${i}]`).join(' ') ?? ''
-                    }`.trim()
+                  ? `${(e.payload.translated as string) ?? ''} ${(e.payload.icons as string[])?.map((i: string) => `[${i}]`).join(' ') ?? ''}`.trim()
                   : (e.payload.content as string) ?? ''
 
                 return (
-                  <div
-                    key={e.id}
-                    className={`flex ${isLearner ? 'justify-start' : 'justify-end'}`}
-                  >
-                    <div
-                      className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm ${
-                        isLearner
-                          ? 'bg-blue-900/60 text-blue-100 rounded-bl-sm'
-                          : 'bg-gray-700 text-gray-100 rounded-br-sm'
-                      }`}
-                    >
-                      <div className="text-xs opacity-60 mb-1">
-                        {isLearner ? '🧑 Learner' : '🤖 NPC'}
+                  <div key={e.id} style={{ display: 'flex', justifyContent: isLearner ? 'flex-start' : 'flex-end' }}>
+                    <div style={{
+                      maxWidth: '72%',
+                      padding: '10px 14px',
+                      borderRadius: isLearner ? '16px 16px 16px 4px' : '16px 16px 4px 16px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      lineHeight: 1.5,
+                      background: isLearner ? 'var(--surface-sub)' : 'var(--nav-active-bg)',
+                      color: 'var(--text-primary)',
+                    }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
+                        {isLearner ? learnerName : 'NPC'}
                       </div>
                       {text}
                     </div>
@@ -425,12 +518,14 @@ export default function SessionReportPage() {
         )}
 
         {sessionEvents.length === 0 && !scoring && (
-          <div className="text-center py-8 text-gray-500 text-sm">
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '13px' }}>
             No transcript events recorded for this session.
           </div>
         )}
-
+      </div>
       </main>
+
+      <TherapistBottomNav />
     </div>
   )
 }

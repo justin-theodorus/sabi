@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import type { AACIcon } from './AACBoard'
 
 interface MessageBarProps {
@@ -26,22 +25,28 @@ export default function MessageBar({
           <span className="text-gray-400 text-sm italic">Select icons above to build your message…</span>
         ) : (
           selectedIcons.map((icon, i) => (
-            <button
+            <div
               key={`${icon.id}-${i}`}
-              onClick={() => onRemove(i)}
-              className="flex items-center gap-1 bg-blue-50 hover:bg-red-50 border border-blue-200 hover:border-red-300 rounded-lg px-2 py-1 transition-colors group"
-              title="Click to remove"
+              className="relative flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1 pr-5"
             >
-              <div className="w-6 h-6 relative flex-shrink-0">
-                <Image
-                  src={`/icons/${icon.category}/${icon.id}.png`}
-                  alt={icon.label}
-                  fill
-                  className="object-contain"
-                />
-              </div>
-              <span className="text-xs text-blue-800 group-hover:text-red-700 font-medium">{icon.label}</span>
-            </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={icon.imageUrl}
+                alt={icon.label}
+                className="w-6 h-6 object-contain flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+              <span className="text-xs text-blue-800 font-medium">{icon.label}</span>
+              <button
+                onClick={() => onRemove(i)}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-500 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors"
+                title="Remove"
+              >
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           ))
         )}
       </div>

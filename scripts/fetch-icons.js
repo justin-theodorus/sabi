@@ -10,7 +10,16 @@ const fs = require('fs');
 const path = require('path');
 
 const ICONS = {
-  core_words: ['want', 'go', 'stop', 'help', 'more', 'yes', 'no', 'please', 'finished', 'now', 'here', 'what', 'who', 'like', 'i', 'you'],
+  core_words: [
+    // Core vocabulary
+    'want', 'go', 'stop', 'help', 'more', 'yes', 'no', 'please', 'finished', 'now', 'here', 'what', 'who', 'like', 'i', 'you',
+    // Hawker Centre scenario
+    'chicken-rice', 'chicken', 'rice', 'noodle', 'wonton', 'water', 'tea', 'food', 'hot', 'cold', 'spicy', 'one', 'two', 'how-much', 'takeaway',
+    // Queue Shop scenario
+    'first', 'wrong', 'my-turn',
+    // Home / Family scenario
+    'bread', 'egg', 'vegetable', 'soup', 'enough',
+  ],
   social: ['hi', 'bye', 'thank-you', 'excuse-me', 'sorry', 'good', 'great', 'ok', 'wait', 'understand', 'see-you', 'help-me', 'nice-to-meet-you', 'how-are-you', 'good-morning', 'dont-understand'],
   emotions: ['happy', 'sad', 'angry', 'scared', 'confused', 'excited', 'tired', 'surprised', 'love', 'proud', 'nervous', 'calm', 'bored', 'sick', 'fine', 'frustrated'],
 };
@@ -32,6 +41,12 @@ function get(url) {
 }
 
 async function fetchIcon(keyword, category) {
+  const outPath = path.join(OUT_DIR, category, `${keyword}.png`);
+  if (fs.existsSync(outPath)) {
+    console.log(`  SKIP ${category}/${keyword}.png (already exists)`);
+    return true;
+  }
+
   const searchKeyword = keyword.replace(/-/g, ' ');
   const searchUrl = `https://api.arasaac.org/api/pictograms/en/search/${encodeURIComponent(searchKeyword)}`;
 

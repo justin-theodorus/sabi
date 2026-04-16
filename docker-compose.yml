@@ -6,21 +6,49 @@ services:
     environment:
       - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}
-      - NEXT_PUBLIC_DIALOGUE_URL=http://localhost:8001
-      - NEXT_PUBLIC_AAC_URL=http://localhost:8005
-      - NEXT_PUBLIC_SESSION_URL=http://localhost:8004
-      - NEXT_PUBLIC_PERSONA_URL=http://localhost:8002
-      - NEXT_PUBLIC_EXPRESSION_URL=http://localhost:8003
+      # All API calls route through Kong (port 8000) — single entry point
+      - NEXT_PUBLIC_DIALOGUE_URL=http://localhost:8000
+      - NEXT_PUBLIC_AAC_URL=http://localhost:8000
+      - NEXT_PUBLIC_SESSION_URL=http://localhost:8000
+      - NEXT_PUBLIC_PERSONA_URL=http://localhost:8000
+      - NEXT_PUBLIC_EXPRESSION_URL=http://localhost:8000
     depends_on:
-      - dialogue-engine
-      - aac-icon-service
-      - session-service
+      - kong
+
+  kong:
+    image: kong:3.6-ubuntu
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001
+    volumes:
+      - ./kong/kong.yml:/kong/declarative/kong.yml:ro
+    ports:
+      - "8000:8000"   # Proxy — all client traffic enters here
+      - "8100:8001"   # Admin API — mapped to 8100 on host to avoid conflict with dialogue-engine
+    depends_on:
+      - dialogue-queue-api
       - expression-service
+      - session-service
+      - persona-engine
+      - aac-icon-service
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   dialogue-engine:
     build: ./dialogue-engine
-    ports:
-      - "8001:8001"
+    # Uncomment ports for direct stress testing (DialogueDirectStressUser):
+    #   locust --host http://localhost:8001
+    # Comment out again after testing — dialogue-engine is internal-only in production.
+    # ports:
+    #   - "8001:8001"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
@@ -29,6 +57,31 @@ services:
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
+
+  dialogue-queue-api:
+    build: ./dialogue-queue
+    ports:
+      - "8006:8006"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DIALOGUE_ENGINE_URL=http://dialogue-engine:8001
+    depends_on:
+      - redis
+      - dialogue-engine
+
+  dialogue-queue-worker:
+    build: ./dialogue-queue
+    command: node worker.js
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DIALOGUE_ENGINE_URL=http://dialogue-engine:8001
+      # Concurrent Claude calls per worker pod.
+      # Scale pods with: docker-compose up --scale dialogue-queue-worker=3
+      # Total max Claude calls = replicas × WORKER_CONCURRENCY (keep ≤ your Anthropic tier limit)
+      - WORKER_CONCURRENCY=2
+    depends_on:
+      - redis
+      - dialogue-engine
 
   aac-icon-service:
     build: ./aac-icon-service
@@ -47,6 +100,7 @@ services:
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
       - REDIS_URL=redis://redis:6379
       - MINIO_ENDPOINT=minio
+      - MINIO_PUBLIC_URL=http://localhost:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=session-videos

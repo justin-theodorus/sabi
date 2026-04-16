@@ -8,12 +8,11 @@ export default function SpeechBubble({ text, loading }: SpeechBubbleProps) {
 
   return (
     <div
-      className="absolute left-1/2 -translate-x-1/2 w-[80%] max-w-lg"
-      style={{ top: '8%' }}
+      className="relative mx-auto w-[80%] max-w-lg"
       style={{ zIndex: 4 }}
     >
       <div className="bg-white text-gray-900 rounded-2xl px-5 py-4 shadow-xl relative text-base leading-snug">
-        {loading ? (
+        {loading && !text ? (
           <div className="flex items-center gap-2 text-gray-400">
             <span className="animate-bounce">●</span>
             <span className="animate-bounce delay-100">●</span>

@@ -2,46 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  /* Brand colours */
-  --color-primary: #e8714a;
-  --color-primary-dark: #d4613c;
-  --color-primary-light: #fde8dc;
-  --color-accent: #29cce5;
-  --color-accent-dark: #1ab8d0;
-  --color-lime: #c8e000;
-
-  /* Neutrals */
-  --color-bg: #ffffff;
-  --color-surface: #f5efe8;
-  --color-surface-alt: #f7f7f7;
-  --color-border: #e5e7eb;
-  --color-border-focus: #9ca3af;
-
-  /* Text */
-  --color-text: #111827;
-  --color-text-secondary: #6b7280;
-  --color-text-muted: #9ca3af;
-
-  /* Shape */
-  --radius-sm: 0.5rem; /* 8px  — tags, badges */
-  --radius-md: 0.75rem; /* 12px — small cards */
-  --radius-lg: 1.25rem; /* 20px — inputs, buttons */
-  --radius-xl: 1.5rem; /* 24px — cards */
-  --radius-2xl: 2rem; /* 32px — hero panels */
-  --radius-pill: 9999px; /* fully round */
-
-  /* Shadow */
-  --shadow-sm: 0 1px 4px 0 rgba(0, 0, 0, 0.07);
-  --shadow-md: 0 4px 16px 0 rgba(0, 0, 0, 0.09);
-
-  /* Transition */
-  --ease: 0.18s ease;
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
 }
 
-/* ─────────────────────────────────────────────
-   Base
-   ───────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+:root {
+  /* Brand colours — all UI colors must use these variables */
+  --green:  #2FB05A;
+  --blue:   #7DB2F6;
+  --yellow: #FEDB5A;
+  --pink:   #FF93A1;
+
+  /* Text */
+  --text-primary:   #111111;
+  --text-secondary: #767676;
+  --text-muted:     #AAAAAA;
+
+  /* Surfaces */
+  --surface:     #FFFFFF;
+  --surface-sub: #F2F2F5;
+  --bg:          #F5F5F7;
+  --border:      rgba(0,0,0,.08);
+
+  /* Navigation */
+  --nav-h:           68px;
+  --nav-active-bg:   #D9E8FF;
+  --nav-active-text: #2D6BE4;
+
+  /* Font stack */
+  --font: 'SF Pro Rounded', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Difficulty badge tokens */
+  --diff-beginner-bg:      #e6f4ea;
+  --diff-beginner-text:    #1a6e35;
+  --diff-beginner-border:  #a8d5b5;
+  --diff-inter-bg:         #fff8e1;
+  --diff-inter-text:       #8a6100;
+  --diff-inter-border:     #f9d96e;
+  --diff-hard-bg:          #ffeef1;
+  --diff-hard-text:        #c0394a;
+  --diff-hard-border:      #ffb3bd;
+  --diff-advanced-bg:      #f0eeff;
+  --diff-advanced-text:    #5b4fd8;
+  --diff-advanced-border:  #c4b5fd;
+
+  /* Mode badge tokens */
+  --mode-learning-bg:     #e6f4ea;
+  --mode-learning-text:   #1a6e35;
+  --mode-learning-border: #a8d5b5;
+  --mode-survival-bg:     #ffeef1;
+  --mode-survival-text:   #c0394a;
+  --mode-survival-border: #ffb3bd;
+
+  /* Legacy — kept for backward compat */
+  --color-primary:       #7DB2F6;
+  --color-primary-dark:  #5a9de8;
+  --color-primary-light: #dbeafe;
+  --color-bg:            #F5F5F7;
+  --color-surface:       #F2F2F5;
+  --color-surface-alt:   #F2F2F5;
+  --color-border:        rgba(0,0,0,.08);
+  --color-border-focus:  rgba(0,0,0,.2);
+  --color-text:          #111111;
+  --color-text-secondary:#767676;
+  --color-text-muted:    #AAAAAA;
+  --radius-sm:   0.5rem;
+  --radius-md:   0.75rem;
+  --radius-lg:   1.375rem;
+  --radius-xl:   1.375rem;
+  --radius-2xl:  1.375rem;
+  --radius-pill: 9999px;
+  --shadow-sm:   0 1px 4px 0 rgba(0,0,0,.06);
+  --shadow-md:   0 4px 16px 0 rgba(0,0,0,.09);
+  --ease:        0.18s cubic-bezier(.34,1.56,.64,1);
+}
+
+/* ─── Base ─── */
 *,
 *::before,
 *::after {
@@ -52,180 +94,480 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
-  /* SF Rounded on Apple; Nunito as the closest web-safe rounded fallback */
-  font-family:
-    ui-rounded, "SF Pro Rounded", var(--font-nunito, "Nunito"), system-ui,
-    sans-serif;
+  font-size: 16px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100dvh;
 }
 
-@layer components {
-  /* ── Page shell ── */
-  .sabi-page {
-    @apply min-h-screen flex flex-col bg-white;
-    background: var(--color-bg);
-    color: var(--color-text);
-  }
+/* ─── Badge base (shared by all badge variants) ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+}
 
-  .sabi-centered {
-    @apply flex flex-col items-center justify-center flex-1 px-6 py-12 w-full max-w-xs mx-auto;
-  }
+/* Difficulty badges */
+.badge-beginner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-beginner-bg);
+  color: var(--diff-beginner-text);
+  border: 1px solid var(--diff-beginner-border);
+}
+.badge-intermediate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-inter-bg);
+  color: var(--diff-inter-text);
+  border: 1px solid var(--diff-inter-border);
+}
+.badge-hard {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-hard-bg);
+  color: var(--diff-hard-text);
+  border: 1px solid var(--diff-hard-border);
+}
+.badge-advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--diff-advanced-bg);
+  color: var(--diff-advanced-text);
+  border: 1px solid var(--diff-advanced-border);
+}
 
-  /* ── Card ── */
-  .sabi-card {
-    @apply w-full bg-white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
-    padding: 1.5rem;
-  }
+/* Mode badges */
+.badge-learning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--mode-learning-bg);
+  color: var(--mode-learning-text);
+  border: 1px solid var(--mode-learning-border);
+}
+.badge-survival {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: var(--mode-survival-bg);
+  color: var(--mode-survival-text);
+  border: 1px solid var(--mode-survival-border);
+}
 
-  /* ── Inputs ── */
-  .sabi-input {
-    @apply w-full text-sm;
-    background: var(--color-surface-alt);
-    border: 1.5px solid var(--color-border);
-    border-radius: var(--radius-pill);
-    color: var(--color-text);
-    padding: 0.75rem 1.25rem;
-    outline: none;
-    transition: border-color var(--ease);
-    font-family: inherit;
-  }
-  .sabi-input::placeholder {
-    color: var(--color-text-muted);
-  }
-  .sabi-input:focus {
-    border-color: var(--color-border-focus);
-  }
+/* Neutral badge */
+.badge-neutral {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: var(--font);
+  background: #f5f5f5;
+  color: #555555;
+  border: 1px solid #e0e0e0;
+}
 
-  /* ── Buttons ── */
-  .sabi-btn {
-    @apply inline-flex items-center justify-center font-bold text-sm;
-    border: none;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    padding: 0.75rem 1.5rem;
-    transition:
-      background var(--ease),
-      opacity var(--ease),
-      transform var(--ease);
-    font-family: inherit;
-  }
-  .sabi-btn:active {
-    transform: scale(0.97);
-  }
-  .sabi-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+/* ─── Page shell ─── */
+.sabi-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font);
+}
 
-  .sabi-btn-primary {
-    @apply sabi-btn w-full;
-    background: var(--color-primary);
-    color: #fff;
-  }
-  .sabi-btn-primary:hover:not(:disabled) {
-    background: var(--color-primary-dark);
-  }
+.sabi-centered {
+  @apply flex flex-col items-center justify-center flex-1 px-6 py-12 w-full max-w-xs mx-auto;
+}
 
-  .sabi-btn-accent {
-    @apply sabi-btn w-full;
-    background: var(--color-accent);
-    color: #fff;
-  }
-  .sabi-btn-accent:hover:not(:disabled) {
-    background: var(--color-accent-dark);
-  }
+/* ─── Card ─── */
+.sabi-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+}
 
-  .sabi-btn-ghost {
-    @apply sabi-btn;
-    background: var(--color-surface-alt);
-    color: var(--color-text);
-  }
-  .sabi-btn-ghost:hover:not(:disabled) {
-    background: var(--color-border);
-  }
+/* ─── Inputs ─── */
+.sabi-input {
+  width: 100%;
+  height: 44px;
+  background: var(--surface-sub);
+  border: none;
+  border-radius: 99px;
+  color: var(--text-primary);
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: background 0.18s;
+  font-family: var(--font);
+}
+.sabi-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.sabi-input:focus {
+  background: #EAEAEF;
+  box-shadow: 0 0 0 2px rgba(125,178,246,.35);
+}
 
-  /* ── Pill answer option (mood questions) ── */
-  .sabi-option {
-    @apply w-full text-sm font-semibold text-center;
-    background: var(--color-surface-alt);
-    border: 1.5px solid transparent;
-    border-radius: var(--radius-pill);
-    color: var(--color-text);
-    padding: 0.875rem 1.25rem;
-    cursor: pointer;
-    transition:
-      background var(--ease),
-      border-color var(--ease),
-      transform var(--ease);
-    font-family: inherit;
-  }
-  .sabi-option:hover {
-    background: var(--color-border);
-  }
-  .sabi-option:active {
-    transform: scale(0.97);
-  }
-  .sabi-option.selected {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
-    color: #fff;
-  }
+/* ─── Buttons (base) ─── */
+.sabi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+}
+.sabi-btn:active {
+  transform: scale(0.97);
+}
+.sabi-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.sabi-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 
-  /* ── Progress dots ── */
-  .sabi-dot {
-    @apply inline-block rounded-full transition-all duration-300;
-    height: 0.5rem;
-    background: var(--color-border);
-    width: 0.625rem;
-  }
-  .sabi-dot.active {
-    background: var(--color-lime);
-    width: 1.75rem;
-  }
-  .sabi-dot.done {
-    background: var(--color-lime);
-    opacity: 0.4;
-  }
+.sabi-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+  width: 100%;
+  background: var(--blue);
+  color: #fff;
+}
+.sabi-btn-primary:hover:not(:disabled) {
+  background: #5a9de8;
+}
+.sabi-btn-primary:active {
+  transform: scale(0.97);
+}
+.sabi-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.sabi-btn-primary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 
-  /* ── Role card (login screen 1) ── */
-  .sabi-role-card {
-    @apply flex flex-col items-center gap-3 cursor-pointer;
-    background: var(--color-bg);
-    border: 1.5px solid var(--color-border);
-    border-radius: var(--radius-xl);
-    padding: 1.25rem 1rem;
-    transition:
-      background var(--ease),
-      border-color var(--ease),
-      transform var(--ease);
-    font-family: inherit;
-  }
-  .sabi-role-card:hover {
-    background: var(--color-surface-alt);
-    border-color: var(--color-border-focus);
-  }
-  .sabi-role-card:active {
-    transform: scale(0.97);
-  }
+.sabi-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+  width: 100%;
+  background: var(--green);
+  color: #fff;
+}
+.sabi-btn-accent:hover:not(:disabled) {
+  background: #259e4f;
+}
+.sabi-btn-accent:active {
+  transform: scale(0.97);
+}
+.sabi-btn-accent:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
-  /* ── Back link ── */
-  .sabi-back {
-    @apply inline-flex items-center gap-1.5 text-xs font-semibold;
-    color: var(--color-text-muted);
-    background: none;
-    border: none;
-    cursor: pointer;
-    transition: color var(--ease);
-    font-family: inherit;
-  }
-  .sabi-back:hover {
-    color: var(--color-text-secondary);
-  }
+.sabi-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.18s, opacity 0.18s, transform var(--ease);
+  font-family: var(--font);
+  min-height: 44px;
+  background: var(--surface-sub);
+  color: var(--text-primary);
+}
+.sabi-btn-ghost:hover:not(:disabled) {
+  background: #EAEAEF;
+}
+.sabi-btn-ghost:active {
+  transform: scale(0.97);
+}
+.sabi-btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── Pill answer option (mood / check-in) ─── */
+.sabi-option {
+  width: 100%;
+  text-align: center;
+  height: 52px;
+  background: var(--surface-sub);
+  border: 1.5px solid transparent;
+  border-radius: 16px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  font-family: var(--font);
+}
+.sabi-option:hover {
+  background: #EAEAEF;
+}
+.sabi-option:active {
+  transform: scale(0.97);
+}
+.sabi-option.selected {
+  background: var(--nav-active-bg);
+  border-color: #a8c8f5;
+  color: var(--nav-active-text);
+}
+
+/* ─── Progress dots ─── */
+.sabi-dot {
+  display: inline-block;
+  border-radius: 9999px;
+  transition: all 0.3s;
+  height: 6px;
+  background: var(--border);
+  width: 6px;
+}
+.sabi-dot.active {
+  background: var(--green);
+  width: 24px;
+}
+.sabi-dot.done {
+  background: var(--green);
+  opacity: 0.4;
+}
+
+/* ─── Role card (login screen) ─── */
+.sabi-role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 22px;
+  padding: 20px 16px;
+  transition: background 0.15s, border-color 0.15s, transform var(--ease);
+  font-family: var(--font);
+}
+.sabi-role-card:hover {
+  background: var(--surface-sub);
+  border-color: rgba(0,0,0,.18);
+}
+.sabi-role-card:active {
+  transform: scale(0.97);
+}
+
+/* ─── Back link ─── */
+.sabi-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s;
+  font-family: var(--font);
+}
+.sabi-back:hover {
+  color: var(--text-secondary);
+}
+
+/* ─── CTA circle button (colored cards) ─── */
+.cta-circle {
+  width: 48px;
+  height: 48px;
+  background: #111111;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: flex-start;
+  transition: transform var(--ease), background 0.15s;
+}
+.cta-circle:hover {
+  background: #2a2a2a;
+  transform: scale(1.1);
+}
+.cta-circle:active {
+  transform: scale(0.95);
+}
+.cta-circle:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 2px;
+}
+
+/* ─── Ghost delete button ─── */
+.btn-ghost-delete {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.btn-ghost-delete:hover {
+  background: #fdf3f2;
+  border-color: #f5b5b0;
+}
+.btn-ghost-delete:focus-visible {
+  outline: 2px solid #c0394a;
+  outline-offset: 2px;
+}
+
+/* ─── Colored action card (dashboard) ─── */
+.action-card {
+  border-radius: 22px;
+  padding: 24px;
+  min-height: 244px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s;
+}
+.action-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 40px rgba(0,0,0,.11);
+}
+.action-card:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.action-card-spacer {
+  flex: 1;
+  min-height: 20px;
+}
+.action-card-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(255,255,255,.72);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.action-card-body {
+  margin-bottom: 16px;
+}
+.action-card-body h2 {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.action-card-body p {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(0,0,0,.52);
+  line-height: 1.45;
 }
