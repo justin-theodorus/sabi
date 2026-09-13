@@ -13,7 +13,9 @@
     "db:migrate": "tsx --env-file=.env.local db/migrate.ts",
     "pretypecheck": "next typegen",
     "typecheck": "tsc --noEmit",
-    "eval": "tsx --env-file=.env.local evals/run.ts"
+    "eval": "tsx --env-file=.env.local evals/run.ts",
+    "bench": "tsx bench/run.ts",
+    "bench:cost": "tsx --env-file=.env.local bench/cost.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.53",
