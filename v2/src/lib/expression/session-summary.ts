@@ -8,7 +8,14 @@
 
 import type { LearnerExpressionRecord, SessionEventRow } from '@/lib/session/types'
 
-function recordOf(payload: Record<string, unknown>): LearnerExpressionRecord | null {
+/**
+ * Pulls the expression record off an npc_response payload, or null.
+ *
+ * Exported because the Phase 4 report timeline reads the same field and must apply the same guard:
+ * `learnerExpression` is optional on the type (rows written before Phase 3 have no such key) and
+ * the payload itself is untyped jsonb.
+ */
+export function recordOf(payload: Record<string, unknown>): LearnerExpressionRecord | null {
   const value = payload.learnerExpression
   if (value === null || typeof value !== 'object') return null
   const record = value as Partial<LearnerExpressionRecord>

@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
 
-import { classifyModelError } from '@/lib/ai/errors'
-import { buildEmotionSummary } from '@/lib/expression/session-summary'
 import { jsonError, requireSession } from '@/lib/http'
-import { NotEnoughTurnsError, scoreSession } from '@/lib/scoring/score-session'
-import { buildScoringTranscript } from '@/lib/scoring/transcript'
-import { loadAllEvents, saveCompetenceScores } from '@/lib/session/repository'
+import { runScoring } from '@/lib/scoring/run-scoring'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -18,16 +14,19 @@ export const maxDuration = 60
  *
  * 1. v1 asked for JSON in the prose, stripped markdown fences by hand (:786-789), and then filled
  *    every missing dimension with `float(scores.get(k, 50))` (:793-797). A response carrying only
- *    a summary produced a complete, plausible, fabricated 50/50/50/50/50 clinical record, which
- *    was rendered on a therapist's radar chart and fed back into the next session's prompt to
- *    calibrate difficulty (:390-407). Here the schema is enforced by the provider and validated on
- *    the way back, and a response that fails it produces NO score.
+ *    a summary produced a complete, plausible, entirely fabricated 50/50/50/50/50 clinical record,
+ *    which was rendered on a therapist's radar chart and fed back into the next session's prompt
+ *    to calibrate difficulty (:390-407). Here the schema is enforced by the provider and validated
+ *    on the way back, and a response that fails it produces NO score.
  *
  * 2. v1 ran this from the browser and let the browser write the result to the database
- *    (therapist/sessions/[sessionId]/page.tsx:233). The write happens here, server-side, in the
- *    same request that produced it.
+ *    (therapist/sessions/[sessionId]/page.tsx:233). The write happens server-side, in the same
+ *    request that produced it.
  *
- * Phase 4 renders the result; this route only produces and stores it.
+ * As of Phase 4 this route is no longer how scoring normally fires — POST /end schedules it in an
+ * after() callback, so it happens even if the learner closes the tab. This stays as the retry
+ * path, and it stays cookie-gated: the report is public to READ, and putting a paid model call
+ * behind an unauthenticated URL would be a different thing entirely.
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSession({ allowEnded: true })
@@ -44,32 +43,19 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ scores: auth.session.competenceScores, cached: true })
   }
 
-  const events = await loadAllEvents(auth.session.id)
-  const turns = buildScoringTranscript(events)
+  const outcome = await runScoring({
+    sessionId: auth.session.id,
+    scenarioId: auth.session.scenarioId,
+  })
 
-  try {
-    const scores = await scoreSession({
-      scenarioId: auth.session.scenarioId,
-      turns,
-      // Phase 3. Null for any session recorded before it, and for any session run without a
-      // camera, which the prompt already renders as "Not available".
-      emotionSummary: buildEmotionSummary(events),
-    })
-    await saveCompetenceScores(auth.session.id, scores)
+  if (outcome.kind === 'scored') return NextResponse.json({ scores: outcome.scores, cached: false })
 
-    return NextResponse.json({ scores, cached: false })
-  } catch (error) {
-    if (error instanceof NotEnoughTurnsError) {
-      return jsonError(422, 'not enough turns to score', { learnerTurns: error.turns })
-    }
-
-    const classified = classifyModelError(error)
-    console.error(`[score] ${classified.kind}: ${classified.log}`)
-
-    // Nothing is written. An absent score is recoverable; an invented one is not.
-    return jsonError(classified.kind === 'malformed_output' ? 422 : 503, 'scoring failed', {
-      kind: classified.kind,
-      retryable: classified.retryable,
-    })
+  if (outcome.kind === 'skipped') {
+    return jsonError(422, 'not enough turns to score', { learnerTurns: outcome.learnerTurns })
   }
+
+  return jsonError(outcome.errorKind === 'malformed_output' ? 422 : 503, 'scoring failed', {
+    kind: outcome.errorKind,
+    retryable: outcome.retryable,
+  })
 }
