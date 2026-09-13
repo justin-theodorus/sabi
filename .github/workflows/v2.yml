@@ -54,7 +54,10 @@ jobs:
       # additive or it is nothing.
       - name: no v1 file has changed since main
         run: |
-          git fetch origin main --depth=0
+          # checkout@v4 with fetch-depth: 0 leaves the clone unshallow, so this only needs to
+          # create the ref. `--depth=0` is not a valid depth and aborted the job before the diff
+          # ever ran, which is why this gate passed nothing until Phase 5 first pushed.
+          git fetch origin main
           CHANGED=$(git diff --name-only origin/main...HEAD -- \
             aac-icon-service/ dialogue-engine/ dialogue-queue/ expression-service/ \
             frontend/ k8s/ kong/ persona-engine/ session-service/ tests/ scripts/ \
