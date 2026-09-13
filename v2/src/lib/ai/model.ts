@@ -40,6 +40,14 @@ export function dialogueModel(): LanguageModel {
 }
 
 /**
+ * Scoring runs after the session has ended, so latency does not matter here the way it does on a
+ * turn a child is waiting through. It stays on Haiku for Phase 2 regardless, so the eval suite
+ * characterises the same model v1 ran; finding 2.22 and the model choice itself are revisited at
+ * Phase 4 with the evals in hand.
+ */
+export const scoringModel = (): LanguageModel => dialogueModel()
+
+/**
  * No model call in v1 had a timeout at any of its six call sites (finding S5), so a hung call
  * held one of three semaphore slots for up to 150 seconds. A full taxonomy of model errors is
  * Phase 2; a timeout is cheap enough to not defer.

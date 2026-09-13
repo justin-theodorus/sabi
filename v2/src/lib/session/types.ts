@@ -36,6 +36,9 @@ export interface SessionRow {
   readonly endReason: EndReason | null
   readonly startedAt: Date
   readonly endedAt: Date | null
+  /** Null until the session has been scored. Written only by /api/sessions/[id]/score. */
+  readonly competenceScores: Record<string, unknown> | null
+  readonly scoredAt: Date | null
 }
 
 export interface SessionEventRow {

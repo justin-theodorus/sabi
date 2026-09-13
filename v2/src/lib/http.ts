@@ -43,15 +43,22 @@ export async function parseBody<T>(
  * they verified a token and then never checked that the caller owned the session
  * (finding S4, session-service/index.js endpoints 12-16 and 18-20).
  */
-export async function requireSession(): Promise<
-  { ok: true; session: SessionRow } | { ok: false; response: NextResponse }
-> {
+export interface RequireSessionOptions {
+  /** Scoring and the report run after the session is over, so they opt out of the active check. */
+  readonly allowEnded?: boolean
+}
+
+export async function requireSession(
+  options: RequireSessionOptions = {},
+): Promise<{ ok: true; session: SessionRow } | { ok: false; response: NextResponse }> {
   const id = (await cookies()).get(SESSION_COOKIE)?.value
   if (!id) return { ok: false, response: jsonError(401, 'no session') }
 
   const session = await loadSession(id)
   if (!session) return { ok: false, response: jsonError(404, 'session not found') }
-  if (session.status !== 'active') return { ok: false, response: jsonError(409, 'session already ended') }
+  if (!options.allowEnded && session.status !== 'active') {
+    return { ok: false, response: jsonError(409, 'session already ended') }
+  }
 
   return { ok: true, session }
 }

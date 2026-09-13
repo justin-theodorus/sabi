@@ -26,6 +26,8 @@ const toSession = (row: any): SessionRow => ({
   endReason: row.end_reason as EndReason | null,
   startedAt: new Date(row.started_at),
   endedAt: row.ended_at === null ? null : new Date(row.ended_at),
+  competenceScores: row.competence_scores ?? null,
+  scoredAt: row.scored_at === null || row.scored_at === undefined ? null : new Date(row.scored_at),
 })
 
 const toEvent = (row: any): SessionEventRow => ({
@@ -202,4 +204,23 @@ export async function loseHeart(sessionId: string): Promise<number | null> {
      returning hearts
   `
   return row ? Number(row.hearts) : null
+}
+
+/**
+ * Records a score. Written by the route that produced it, never by the client the way v1's
+ * therapist page did (therapist/sessions/[sessionId]/page.tsx:233).
+ *
+ * The payload and the timestamp are set together, which the 0002 check constraint enforces, so a
+ * scored session and an unscored one are always distinguishable.
+ */
+export async function saveCompetenceScores(
+  sessionId: string,
+  scores: Record<string, unknown>,
+): Promise<void> {
+  await db()`
+    update sessions
+       set competence_scores = ${JSON.stringify(scores)}::jsonb,
+           scored_at         = now()
+     where id = ${sessionId}
+  `
 }
