@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import type { ModelCallMeasurement } from '@/lib/ai/measure'
 import type { TurnData } from '@/lib/dialogue/stream-types'
 import { createTurnStream, type TurnStreamArgs } from '@/lib/dialogue/turn-stream'
 import type { NpcEmotion } from '@/lib/prompt/types'
@@ -130,4 +131,58 @@ test('a failure never emits a data-turn, so no partial turn is logged', async ()
     const collected = await collect({ model: failingModel(apiCallError(status)) })
     assert.equal(dataOf(collected, 'data-turn'), undefined, `status ${status}`)
   }
+})
+
+// --- Phase 5: measurement -------------------------------------------------------------------
+
+test('a completed turn is measured exactly once', async () => {
+  const measured: ModelCallMeasurement[] = []
+  await collect({ onMeasured: (m) => measured.push(m) })
+
+  assert.equal(measured.length, 1)
+  assert.equal(measured[0].route, 'dialogue')
+  assert.ok(measured[0].totalMs >= 0)
+})
+
+test('visible TTFT is measured from the first delta, not from the first model token', async () => {
+  // Under Output.object the model opens with `{"emotion":"`, none of which reaches the learner.
+  // A visible TTFT recorded at the first model token would understate the wait the product is
+  // judged on, which is the whole reason 0004 carries two columns instead of one.
+  const measured: ModelCallMeasurement[] = []
+  await collect({ onMeasured: (m) => measured.push(m) })
+
+  assert.notEqual(measured[0].ttftVisibleMs, null, 'a turn that emitted text has a visible TTFT')
+  assert.ok(measured[0].ttftVisibleMs! >= 0)
+  assert.ok(
+    measured[0].ttftVisibleMs! <= measured[0].totalMs,
+    'the first visible token cannot arrive after the call finished',
+  )
+})
+
+test('a measurement that throws does not damage the turn it was measuring', async () => {
+  // The learner has already been served by the time this runs. A failure here must stay a missing
+  // row, not a failed turn.
+  const collected = await collect({
+    onMeasured: () => {
+      throw new Error('database is on fire')
+    },
+  })
+
+  assert.equal(collected.text, 'Hi')
+  assert.ok(typesOf(collected).includes('data-turn'), 'the turn was still committed and reported')
+  assert.ok(!typesOf(collected).includes('data-error'))
+})
+
+test('a failed turn is not measured, because no turn happened to attribute a cost to', async () => {
+  const measured: ModelCallMeasurement[] = []
+  await collect({ model: failingModel(apiCallError(429)), onMeasured: (m) => measured.push(m) })
+
+  assert.equal(measured.length, 0)
+})
+
+test('measuring is optional, and a stream with no observer behaves identically', async () => {
+  const withOut = await collect({})
+  const withIn = await collect({ onMeasured: () => {} })
+  assert.deepEqual(typesOf(withOut), typesOf(withIn))
+  assert.equal(withOut.text, withIn.text)
 })

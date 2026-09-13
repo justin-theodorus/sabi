@@ -15,6 +15,7 @@ import {
 } from 'ai'
 
 import { classifyModelError } from '@/lib/ai/errors'
+import { measureModelCall, type ModelCallMeasurement } from '@/lib/ai/measure'
 import {
   advancePartialReply,
   DEFAULT_EMOTION,
@@ -27,6 +28,10 @@ import type { LearnerEmotion } from '@/lib/expression/types'
 import type { NpcEmotion } from '@/lib/prompt/types'
 
 const TEXT_PART_ID = 'npc-reply'
+
+/** A LanguageModel is either a bare gateway id or a provider instance; only the first is a string. */
+const modelIdOf = (model: LanguageModel): string =>
+  typeof model === 'string' ? model : model.modelId
 
 export interface TurnStreamArgs {
   readonly model: LanguageModel
@@ -46,6 +51,14 @@ export interface TurnStreamArgs {
     learnerEmotion: LearnerEmotion | null,
     farewell: boolean,
   ) => Promise<TurnData>
+  /**
+   * Phase 5. What the call cost and how long it took.
+   *
+   * Fires after the last meaningful byte has been written, so the measurement INSERT cannot sit
+   * between the model finishing and the learner seeing the reply. Its own failure is swallowed by
+   * the caller: a turn that cannot be measured must still be a turn that happened.
+   */
+  readonly onMeasured?: (measurement: ModelCallMeasurement) => void
 }
 
 export function createTurnStream(
@@ -71,6 +84,11 @@ export function createTurnStream(
       })
 
       let textOpen = false
+      const startedAt = performance.now()
+      // Time to the first token a LEARNER sees, which is not the same as the first token the
+      // model produced: under Output.object the model opens with `{"emotion":"`, and nothing of
+      // that is visible. Both are recorded; see 0004_model_calls.sql.
+      let firstVisibleAt: number | null = null
 
       try {
         // With `output` set, result.stream carries raw JSON, so it cannot be merged into the UI
@@ -87,6 +105,7 @@ export function createTurnStream(
           if (step.emotion !== null) streamedEmotion = step.emotion
           if (step.delta !== '') {
             if (!textOpen) {
+              firstVisibleAt = performance.now()
               writer.write({ type: 'text-start', id: TEXT_PART_ID })
               textOpen = true
             }
@@ -110,6 +129,30 @@ export function createTurnStream(
         )
 
         writer.write({ type: 'data-turn', data: turn, transient: true })
+
+        // Measured last, and defensively. Everything read here is a settled promise on a result
+        // whose stream has already drained, so none of it can delay the reply — but a provider
+        // that changes shape must not turn a delivered turn into a failed one.
+        if (args.onMeasured) {
+          try {
+            const steps = await result.steps
+            const finalStep = steps[steps.length - 1]
+            args.onMeasured(
+              measureModelCall({
+                route: 'dialogue',
+                requestedModelId: modelIdOf(args.model),
+                totalMs: performance.now() - startedAt,
+                ttftVisibleMs: firstVisibleAt === null ? null : firstVisibleAt - startedAt,
+                usage: await result.usage,
+                performance: finalStep?.performance,
+                providerMetadata: await result.providerMetadata,
+                finishReason: await result.finishReason,
+              }),
+            )
+          } catch (measureError) {
+            console.error('[measure] dialogue measurement failed:', (measureError as Error).message)
+          }
+        }
       } catch (error) {
         if (textOpen) writer.write({ type: 'text-end', id: TEXT_PART_ID })
 

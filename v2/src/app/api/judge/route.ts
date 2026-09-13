@@ -1,14 +1,24 @@
 import { generateText } from 'ai'
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { classifyModelError } from '@/lib/ai/errors'
+import { measureModelCall } from '@/lib/ai/measure'
 import { dialogueModel, MODEL_TIMEOUT_MS } from '@/lib/ai/model'
 import { parseBody, requireSession } from '@/lib/http'
 import { SCENARIO_DESCRIPTIONS } from '@/lib/prompt/constants'
-import { loadHistory } from '@/lib/session/repository'
+import { loadHistory, recordModelCall } from '@/lib/session/repository'
 
 export const runtime = 'nodejs'
+
+/**
+ * This route makes a model call bounded by MODEL_TIMEOUT_MS (30s) and had no maxDuration at all,
+ * so the platform default — shorter than that timeout — could kill the invocation before the
+ * call's own timeout ever fired. Found in Phase 5 while instrumenting it: a truncated judge call
+ * is a heart not charged, and it would also have skewed this route's own latency distribution by
+ * censoring its slow tail.
+ */
+export const maxDuration = 60
 
 const MAX_OUTPUT_TOKENS = 5 // main.py:727
 
@@ -50,6 +60,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ offContext: false, reason: 'no_npc_turn_yet' })
   }
 
+  const model = dialogueModel()
   const prompt =
     `Scenario: ${SCENARIO_DESCRIPTIONS[session.scenarioId]}\n` +
     `The other person said: "${lastNpcLine}"\n` +
@@ -57,13 +68,30 @@ export async function POST(request: Request) {
     'Is the learner\'s reply off-topic or irrelevant to what the other person said? ' +
     'Answer with exactly one word: yes or no.'
 
+  const startedAt = performance.now()
+
   try {
-    const { text } = await generateText({
-      model: dialogueModel(),
+    const result = await generateText({
+      model,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       prompt,
       abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     })
+    const { text } = result
+
+    // Phase 5. Survival makes this call on every turn, so a per-session cost that counted only
+    // /dialogue would understate a survival session by roughly one call per turn. Written after
+    // the response has flushed, and never allowed to turn a fail-open into a 500.
+    const measured = measureModelCall({
+      route: 'judge',
+      requestedModelId: typeof model === 'string' ? model : model.modelId,
+      totalMs: performance.now() - startedAt,
+      usage: result.usage,
+      performance: result.steps[result.steps.length - 1]?.performance,
+      providerMetadata: result.providerMetadata,
+      finishReason: result.finishReason,
+    })
+    after(() => recordModelCall(session.id, measured))
 
     // v1 compared `answer == "yes"` exactly (main.py:731), so "Yes." with a period read as
     // not-off-context. Normalising costs one line.

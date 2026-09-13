@@ -20,6 +20,7 @@ import { buildScoringTranscript } from '@/lib/scoring/transcript'
 import {
   loadAllEvents,
   loadSession,
+  recordModelCall,
   saveCompetenceScores,
   setScoringState,
 } from '@/lib/session/repository'
@@ -82,7 +83,14 @@ export async function runScoring(args: {
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const scores = await scoreSession({ scenarioId: args.scenarioId, turns, emotionSummary })
+      const scores = await scoreSession({
+        scenarioId: args.scenarioId,
+        turns,
+        emotionSummary,
+        // Phase 5. One scoring call per session, and the only model cost a learner never waits
+        // on — which is exactly why it would have been the easiest one to leave uncounted.
+        onMeasured: (measurement) => void recordModelCall(args.sessionId, measurement),
+      })
       const written = await saveCompetenceScores(args.sessionId, scores)
       if (written) return { kind: 'scored', scores }
 

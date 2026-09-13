@@ -2,6 +2,8 @@
 
 import { generateText, Output } from 'ai'
 
+import { measureModelCall, type ModelCallMeasurement } from '@/lib/ai/measure'
+
 import { MODEL_TIMEOUT_MS, scoringModel } from '@/lib/ai/model'
 import type { ScenarioId } from '@/lib/prompt/types'
 import { buildScoringPrompt, SCORING_INSTRUCTIONS } from '@/lib/scoring/prompt'
@@ -38,6 +40,11 @@ export interface ScoreSessionArgs {
   readonly emotionSummary?: string | null
   /** Injected by the tests and the eval harness. */
   readonly model?: LanguageModel
+  /**
+   * Phase 5. Optional so the eval harness and the tests compile unchanged; supplied by
+   * runScoring, which is the only caller that has a session to attribute the cost to.
+   */
+  readonly onMeasured?: (measurement: ModelCallMeasurement) => void
 }
 
 /**
@@ -51,8 +58,11 @@ export async function scoreSession(args: ScoreSessionArgs): Promise<CompetenceSc
   const learnerTurns = countLearnerTurns(args.turns)
   if (learnerTurns < MIN_SCOREABLE_TURNS) throw new NotEnoughTurnsError(learnerTurns)
 
+  const model = args.model ?? scoringModel()
+  const startedAt = performance.now()
+
   const result = await generateText({
-    model: args.model ?? scoringModel(),
+    model,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     instructions: SCORING_INSTRUCTIONS,
     prompt: buildScoringPrompt({
@@ -63,6 +73,21 @@ export async function scoreSession(args: ScoreSessionArgs): Promise<CompetenceSc
     abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     output: Output.object({ schema: competenceScoresSchema }),
   })
+
+  // Measured BEFORE `output` is read, because reading it throws on a malformed response and a
+  // call that produced no usable score still cost real tokens. A cost that only gets recorded
+  // when the call succeeds is a cost that understates itself exactly when it matters.
+  args.onMeasured?.(
+    measureModelCall({
+      route: 'scoring',
+      requestedModelId: typeof model === 'string' ? model : model.modelId,
+      totalMs: performance.now() - startedAt,
+      usage: result.usage,
+      performance: result.steps[result.steps.length - 1]?.performance,
+      providerMetadata: result.providerMetadata,
+      finishReason: result.finishReason,
+    }),
+  )
 
   // `output` is a getter that throws when the model produced nothing usable. Reading it here
   // keeps the failure inside this function rather than at some later property access.
