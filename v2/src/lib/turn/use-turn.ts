@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 
 import { streamDialogue } from '@/lib/dialogue/client'
+import { toTurnErrorKind } from '@/lib/dialogue/turn-failure'
 import { initialState, turnReducer } from '@/lib/turn/reducer'
 import { TICK_MS } from '@/lib/turn/constants'
 import type { Effect, SessionConfig, TurnAction, TurnState } from '@/lib/turn/types'
@@ -142,11 +143,11 @@ export function useTurn(config: SessionConfig) {
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return
-          const message = error instanceof Error ? error.message : 'something went wrong'
+          const kind = toTurnErrorKind(error)
           dispatch(
             effect.kind === 'createSession'
-              ? { type: 'SESSION_FAILED', message }
-              : { type: 'STREAM_FAILED', message, now: Date.now() },
+              ? { type: 'SESSION_FAILED', kind: kind ?? 'session_failed' }
+              : { type: 'STREAM_FAILED', kind: kind ?? 'stream_failed', now: Date.now() },
           )
         })
         .finally(() => dispatch({ type: 'EFFECT_SETTLED', id: effect.id }))

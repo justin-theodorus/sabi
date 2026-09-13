@@ -1,5 +1,7 @@
 import type { UIMessage } from 'ai'
 
+import type { TurnErrorKind } from '@/lib/turn/types'
+
 /**
  * The metadata the server sends once, at the end of a turn, as a `data-turn` part alongside the
  * text deltas.
@@ -18,5 +20,16 @@ export interface TurnData {
   readonly seq: number
 }
 
-/** Shared by the route and the client so the `data-turn` payload cannot drift between them. */
-export type SabiUIMessage = UIMessage<never, { turn: TurnData }>
+/**
+ * Why a turn failed, as a category rather than a provider string.
+ *
+ * createUIMessageStream's own onError can only return an opaque string, so the classified kind
+ * travels as its own data part written before the stream closes. Finding S5.
+ */
+export interface TurnErrorData {
+  readonly kind: TurnErrorKind
+  readonly retryable: boolean
+}
+
+/** Shared by the route and the client so the payloads cannot drift between them. */
+export type SabiUIMessage = UIMessage<never, { turn: TurnData; error: TurnErrorData }>

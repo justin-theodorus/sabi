@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
+import { classifyModelError } from '@/lib/ai/errors'
 import { dialogueModel, MODEL_TIMEOUT_MS } from '@/lib/ai/model'
 import { parseBody, requireSession } from '@/lib/http'
 import { SCENARIO_DESCRIPTIONS } from '@/lib/prompt/constants'
@@ -69,7 +70,10 @@ export async function POST(request: Request) {
     const answer = text.trim().toLowerCase().replace(/[^a-z]/g, '')
     return NextResponse.json({ offContext: answer === 'yes' })
   } catch (error) {
-    console.error('[judge] failing open:', error instanceof Error ? error.message : error)
-    return NextResponse.json({ offContext: false, reason: 'judge_unavailable' })
+    // Still fails open, but the operator now learns which failure it was rather than reading one
+    // undifferentiated message for a rate limit, a bad key and a timeout alike (finding S5).
+    const classified = classifyModelError(error)
+    console.error(`[judge] failing open on ${classified.kind}: ${classified.log}`)
+    return NextResponse.json({ offContext: false, reason: `judge_unavailable:${classified.kind}` })
   }
 }

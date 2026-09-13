@@ -1,6 +1,7 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from 'ai'
 
-import type { TurnData } from '@/lib/dialogue/stream-types'
+import type { TurnData, TurnErrorData } from '@/lib/dialogue/stream-types'
+import { TurnFailure } from '@/lib/dialogue/turn-failure'
 
 /**
  * Reads a turn from POST /api/dialogue.
@@ -46,11 +47,15 @@ export async function streamDialogue(
 
   const chunks = parseJsonEventStream({ stream: response.body, schema: uiMessageChunkSchema })
   const reader = chunks.getReader()
+  let failure: TurnFailure['kind'] | null = null
 
   try {
     for (;;) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        if (failure !== null) throw new TurnFailure(failure)
+        break
+      }
       if (!value.success) throw value.error
 
       const chunk = value.value
@@ -61,8 +66,13 @@ export async function streamDialogue(
         case 'data-turn':
           callbacks.onMetadata(chunk.data as TurnData)
           break
+        case 'data-error':
+          // The server classified this one. Remember it and let the stream close; the `error`
+          // chunk that follows carries only an opaque string.
+          failure = (chunk.data as TurnErrorData).kind
+          break
         case 'error':
-          throw new Error(chunk.errorText)
+          throw new TurnFailure(failure ?? 'stream_failed')
         default:
           break
       }

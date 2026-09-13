@@ -174,11 +174,11 @@ test('a failed stream surfaces an error and writes no partial NPC turn', () => {
     { type: 'SUBMIT_REQUESTED', now: T0 },
     { type: 'STREAM_STARTED' },
     { type: 'STREAM_DELTA', text: 'Okay' },
-    { type: 'STREAM_FAILED', message: 'rate_limit', now: T0 + 1000 },
+    { type: 'STREAM_FAILED', kind: 'rate_limited', now: T0 + 1000 },
   )
 
   assert.equal(state.phase, 'idle')
-  assert.deepEqual(state.error, { kind: 'stream_failed', message: 'rate_limit' })
+  assert.deepEqual(state.error, { kind: 'rate_limited' })
   assert.equal(state.streamingText, '')
   // v1 appended an empty assistant message here, corrupting every later turn.
   assert.ok(!state.transcript.some((turn) => turn.role === 'npc' && turn.text === ''))
@@ -191,7 +191,7 @@ test('the learner can take another turn after a failure', () => {
     { type: 'ICON_SELECTED', icon: icon('rice') },
     { type: 'SUBMIT_REQUESTED', now: T0 },
     { type: 'STREAM_STARTED' },
-    { type: 'STREAM_FAILED', message: 'boom', now: T0 + 1000 },
+    { type: 'STREAM_FAILED', kind: 'stream_failed', now: T0 + 1000 },
   )
   const retry = run(failed, { type: 'ICON_SELECTED', icon: icon('rice') }, { type: 'SUBMIT_REQUESTED', now: T0 + 2000 })
   assert.equal(retry.phase, 'submitting')

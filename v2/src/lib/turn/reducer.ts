@@ -83,7 +83,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
     }
 
     case 'SESSION_FAILED':
-      return { ...state, phase: 'lobby', error: { kind: 'session_failed', message: action.message } }
+      return { ...state, phase: 'lobby', error: { kind: action.kind } }
 
     case 'ICON_SELECTED':
       if (state.phase !== 'idle') return state
@@ -214,7 +214,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         ...touch(state, action.now),
         phase: 'idle',
         streamingText: '',
-        error: { kind: 'stream_failed', message: action.message },
+        error: { kind: action.kind },
       }
     }
 

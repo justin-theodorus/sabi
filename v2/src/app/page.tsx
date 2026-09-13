@@ -10,6 +10,7 @@ import { DEFAULT_PERSONA } from '@/lib/persona/classify'
 import type { ModeId } from '@/lib/prompt/types'
 import { HAWKER_CENTRE } from '@/lib/scenario/hawker-centre'
 import { secondsLeft as computeSecondsLeft } from '@/lib/turn/reducer'
+import { turnErrorMessage } from '@/lib/turn/error-messages'
 import { useTurn } from '@/lib/turn/use-turn'
 
 const COUNTDOWN_REFRESH_MS = 250
@@ -36,7 +37,7 @@ export default function Page() {
       <Lobby
         mode={mode}
         onMode={setMode}
-        error={state.error?.message ?? null}
+        error={state.error ? turnErrorMessage(state.error.kind) : null}
         onStart={() => dispatch({ type: 'START_REQUESTED', now: Date.now() })}
       />
     )
@@ -67,7 +68,7 @@ export default function Page() {
         eventLine={state.activeEventLine}
       />
 
-      {state.error ? (
+      {state.error && state.error.kind !== 'cancelled' ? (
         <div
           role="alert"
           style={{
@@ -79,7 +80,7 @@ export default function Page() {
             fontWeight: 700,
           }}
         >
-          That turn did not go through — try again. ({state.error.message})
+          {turnErrorMessage(state.error.kind)}
         </div>
       ) : null}
 

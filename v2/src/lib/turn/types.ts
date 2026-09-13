@@ -24,11 +24,25 @@ export interface TranscriptTurn {
   readonly npcEmotion?: NpcEmotion
 }
 
-export type TurnErrorKind = 'stream_failed' | 'session_failed' | 'network'
+/**
+ * Every distinct way a turn can fail. Finding S5: v1 had one handled error class at two of six
+ * call sites, so the learner saw the same nothing whatever went wrong. Each kind here has a
+ * defined user-visible behaviour in `error-messages.ts`, and none of them costs a heart.
+ */
+export type TurnErrorKind =
+  | 'rate_limited'
+  | 'provider_overloaded'
+  | 'timeout'
+  | 'network'
+  | 'provider_rejected'
+  | 'malformed_output'
+  | 'no_output'
+  | 'cancelled'
+  | 'stream_failed'
+  | 'session_failed'
 
 export interface TurnError {
   readonly kind: TurnErrorKind
-  readonly message: string
 }
 
 /** Frozen for the life of the session; reducer init arguments, not state. */
@@ -81,7 +95,7 @@ export interface TurnState {
 export type TurnAction =
   | { readonly type: 'START_REQUESTED'; readonly now: number }
   | { readonly type: 'SESSION_STARTED'; readonly sessionId: string; readonly hearts: number; readonly greeting: string; readonly now: number }
-  | { readonly type: 'SESSION_FAILED'; readonly message: string }
+  | { readonly type: 'SESSION_FAILED'; readonly kind: TurnErrorKind }
   | { readonly type: 'ICON_SELECTED'; readonly icon: AACIcon }
   | { readonly type: 'ICON_REMOVED'; readonly index: number }
   | { readonly type: 'SELECTION_CLEARED' }
@@ -91,7 +105,7 @@ export type TurnAction =
   | { readonly type: 'STREAM_DELTA'; readonly text: string }
   | { readonly type: 'STREAM_METADATA'; readonly turnIndex: number; readonly hearts: number; readonly npcEmotion: NpcEmotion; readonly sessionComplete: boolean; readonly learnerText: string; readonly activeEventLine: string | null }
   | { readonly type: 'STREAM_FINISHED'; readonly now: number }
-  | { readonly type: 'STREAM_FAILED'; readonly message: string; readonly now: number }
+  | { readonly type: 'STREAM_FAILED'; readonly kind: TurnErrorKind; readonly now: number }
   | { readonly type: 'HEART_LOST'; readonly reason: 'timeout' | 'off_context'; readonly hearts?: number; readonly now: number }
   | { readonly type: 'END_REQUESTED'; readonly reason: EndReason }
   | { readonly type: 'EFFECT_SETTLED'; readonly id: string }
