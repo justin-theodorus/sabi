@@ -105,6 +105,19 @@ export interface TurnState {
   readonly expressionWindow: readonly ExpressionSample[]
 
   readonly pending: readonly Effect[]
+
+  /**
+   * Monotonic, incremented once per enqueued effect. It exists only to make effect ids unique.
+   *
+   * Until Phase 4 the id was derived from the counters the state happened to hold
+   * (`${kind}:${turnIndex}:${transcript.length}:${pending.length}`), which is deterministic but
+   * not unique: SESSION_FAILED returns to `lobby` without moving any of them, so a retried start
+   * regenerated `createSession:0:0:0`, the drain in use-turn.ts filtered it out as already
+   * started, no fetch happened, and the phase sat at `submitting` forever. A dialogue turn that
+   * failed before the stream opened had the identical signature. A counter that only ever goes up
+   * makes both unrepresentable without giving up purity.
+   */
+  readonly effectSeq: number
 }
 
 export type TurnAction =

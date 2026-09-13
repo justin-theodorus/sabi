@@ -48,16 +48,22 @@ export function initialState(config: SessionConfig, now: number): TurnState {
     timeoutCharged: false,
     expressionWindow: [],
     pending: [],
+    effectSeq: 0,
   }
 }
 
-/** Effect ids are derived from state, never random, so the reducer stays pure and testable. */
-const effectId = (state: TurnState, kind: string): string =>
-  `${kind}:${state.turnIndex}:${state.transcript.length}:${state.pending.length}`
+/**
+ * Effect ids come from a counter in state, never from Math.random(), so the reducer stays pure and
+ * every id is unique for the life of the session. Uniqueness is the load-bearing half: use-turn.ts
+ * remembers every id it has started and never prunes the set, so a repeated id is silently
+ * dropped rather than retried. See TurnState.effectSeq.
+ */
+const effectId = (state: TurnState, kind: string): string => `${kind}#${state.effectSeq}`
 
 const enqueue = (state: TurnState, effect: Effect): TurnState => ({
   ...state,
   pending: [...state.pending, effect],
+  effectSeq: state.effectSeq + 1,
 })
 
 /** Silence timers restart from here. */

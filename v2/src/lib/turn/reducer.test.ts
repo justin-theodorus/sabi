@@ -77,6 +77,46 @@ test('a second start request while starting is ignored, so no duplicate session 
   assert.deepEqual(effectKinds(twice), ['createSession'])
 })
 
+test('a retried start gets a fresh effect id, so the drain cannot mistake it for the first one', () => {
+  // The Phase 1 defect: effect ids were `${kind}:${turnIndex}:${transcript.length}:${pending.length}`
+  // and SESSION_FAILED moves none of those three, so the retry regenerated `createSession:0:0:0`.
+  // use-turn.ts remembers started ids forever and never prunes them, so the second attempt was
+  // filtered out, no fetch ran, EFFECT_SETTLED never fired, and the phase sat at `submitting` with
+  // no error and no way out but a page reload.
+  const first = turnReducer(initialState(config('learning'), T0), { type: 'START_REQUESTED', now: T0 })
+  const retried = run(
+    first,
+    { type: 'SESSION_FAILED', kind: 'network' },
+    { type: 'EFFECT_SETTLED', id: first.pending[0].id },
+    { type: 'START_REQUESTED', now: T0 + 5000 },
+  )
+
+  assert.equal(retried.phase, 'submitting')
+  assert.deepEqual(effectKinds(retried), ['createSession'])
+  assert.notEqual(retried.pending[0].id, first.pending[0].id)
+})
+
+test('every effect id in a session is unique, which is what the drain relies on', () => {
+  // The same defect bit any retry from a numerically identical state, not just the first one: a
+  // dialogue turn that failed before STREAM_STARTED left transcript.length and turnIndex untouched.
+  const failedTurn = run(
+    started(),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 },
+    { type: 'STREAM_FAILED', kind: 'network', now: T0 + 500 },
+  )
+  const retried = run(
+    drain(failedTurn),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 1000 },
+  )
+
+  assert.deepEqual(effectKinds(retried), ['dialogue'])
+
+  const ids = [failedTurn.pending[0].id, retried.pending[0].id]
+  assert.equal(new Set(ids).size, ids.length)
+})
+
 test('the greeting opens the transcript but the session begins at turn zero', () => {
   const state = started()
   assert.equal(state.phase, 'idle')
