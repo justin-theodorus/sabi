@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Static assets, not source. The MediaPipe wasm glue copied in by scripts/copy-mediapipe-wasm.mjs
+    // is 8000-line generated Emscripten output and lints to ~500 findings that are not ours.
+    "public/**",
   ]),
 ]);
 
