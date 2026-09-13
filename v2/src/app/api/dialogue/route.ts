@@ -1,14 +1,9 @@
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-  streamText,
-  toUIMessageStream,
-} from 'ai'
+import { createUIMessageStreamResponse } from 'ai'
 import { z } from 'zod'
 
 import { dialogueModel, MODEL_TIMEOUT_MS } from '@/lib/ai/model'
-import { detectNpcEmotion } from '@/lib/dialogue/detect-npc-emotion'
-import type { SabiUIMessage, TurnData } from '@/lib/dialogue/stream-types'
+import type { TurnData } from '@/lib/dialogue/stream-types'
+import { createTurnStream } from '@/lib/dialogue/turn-stream'
 import { SILENCE_PLACEHOLDER, toModelMessages } from '@/lib/dialogue/history'
 import { parseBody, requireSession } from '@/lib/http'
 import { buildSystemPrompt, isSessionComplete } from '@/lib/prompt/build-system-prompt'
@@ -78,24 +73,16 @@ export async function POST(request: Request) {
   const timeout = AbortSignal.timeout(MODEL_TIMEOUT_MS)
   const abort = AbortSignal.any([timeout, request.signal])
 
-  const stream = createUIMessageStream<SabiUIMessage>({
-    execute: async ({ writer }) => {
-      const result = streamText({
-        model: dialogueModel(),
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        instructions: system,
-        messages: [
-          ...toModelMessages(history),
-          { role: 'user', content: learnerText || SILENCE_PLACEHOLDER },
-        ],
-        abortSignal: abort,
-      })
-
-      writer.merge(toUIMessageStream({ stream: result.stream }))
-
-      // Awaited after the merge, so tokens are already flowing to the client while this settles.
-      const reply = (await result.text).trim()
-      const npcEmotion = detectNpcEmotion(reply)
+  const stream = createTurnStream({
+    model: dialogueModel(),
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    instructions: system,
+    messages: [
+      ...toModelMessages(history),
+      { role: 'user', content: learnerText || SILENCE_PLACEHOLDER },
+    ],
+    abortSignal: abort,
+    onReply: async (reply, npcEmotion) => {
       const sessionComplete = isSessionComplete(session.scenarioId, reply, session.turnIndex + 1)
 
       const { turnIndex, seq } = await commitTurn({
@@ -109,23 +96,16 @@ export async function POST(request: Request) {
         endReason: sessionComplete ? 'farewell' : null,
       })
 
-      writer.write({
-        type: 'data-turn',
-        data: {
-          turnIndex,
-          hearts: session.hearts,
-          npcEmotion,
-          sessionComplete,
-          learnerText,
-          activeEventLine: activeEvent?.npcLine ?? null,
-          seq,
-        } satisfies TurnData,
-        transient: true,
-      })
+      return {
+        turnIndex,
+        hearts: session.hearts,
+        npcEmotion,
+        sessionComplete,
+        learnerText,
+        activeEventLine: activeEvent?.npcLine ?? null,
+        seq,
+      } satisfies TurnData
     },
-    // Errors are masked by default. These are our own strings, not provider internals, and the
-    // learner needs to know the turn failed rather than watch it end silently.
-    onError: (error) => (error instanceof Error ? error.message : 'dialogue_failed'),
   })
 
   return createUIMessageStreamResponse({ stream })
