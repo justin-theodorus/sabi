@@ -23,6 +23,7 @@ import {
   type PartialReplyState,
 } from '@/lib/dialogue/npc-reply'
 import type { SabiUIMessage, TurnData } from '@/lib/dialogue/stream-types'
+import type { LearnerEmotion } from '@/lib/expression/types'
 import type { NpcEmotion } from '@/lib/prompt/types'
 
 const TEXT_PART_ID = 'npc-reply'
@@ -33,8 +34,17 @@ export interface TurnStreamArgs {
   readonly messages: readonly ModelMessage[]
   readonly maxOutputTokens: number
   readonly abortSignal?: AbortSignal
-  /** Persists the finished turn and returns what the client is told about it. */
-  readonly onReply: (reply: string, npcEmotion: NpcEmotion) => Promise<TurnData>
+  /**
+   * Persists the finished turn and returns what the client is told about it.
+   *
+   * `learnerEmotion` is null whenever the prompt carried no OBSERVABLE EXPRESSION line — no
+   * camera, no permission, or no face for the turn. It is recorded, never fed back into a prompt.
+   */
+  readonly onReply: (
+    reply: string,
+    npcEmotion: NpcEmotion,
+    learnerEmotion: LearnerEmotion | null,
+  ) => Promise<TurnData>
 }
 
 export function createTurnStream(
@@ -91,7 +101,11 @@ export function createTurnStream(
 
         // The validated enum wins over the one seen mid-stream; DEFAULT_EMOTION is the floor.
         const npcEmotion = output.emotion ?? streamedEmotion ?? DEFAULT_EMOTION
-        const turn = await args.onReply(output.reply.trim(), npcEmotion)
+        const turn = await args.onReply(
+          output.reply.trim(),
+          npcEmotion,
+          output.learnerEmotion ?? null,
+        )
 
         writer.write({ type: 'data-turn', data: turn, transient: true })
       } catch (error) {

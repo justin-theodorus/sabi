@@ -16,9 +16,17 @@
 // emotion lands before any prose and the sprite can change as the NPC starts speaking. It also
 // means a reply truncated by maxOutputTokens (256) still carries its emotion, which a trailing
 // marker would not.
+//
+// `learnerEmotion` (Phase 3) sits between the two for the same reason: it is the record of how the
+// learner seemed this turn, it feeds the report and the scoring prompt, and after `reply` it would
+// be the first thing a truncated response lost. It costs two short fields ahead of the prose.
+// Phase 2 measured that moving `reply` to the front did NOT recover TTFT (1925ms median against a
+// 1650-1949ms range), so field order is not the lever latency turns on here — but it is measured
+// again in this phase rather than assumed.
 
 import { z } from 'zod'
 
+import { LEARNER_EMOTIONS } from '@/lib/expression/types'
 import { NPC_EMOTIONS, type NpcEmotion } from '@/lib/prompt/types'
 
 export const npcReplySchema = z.object({
@@ -26,6 +34,16 @@ export const npcReplySchema = z.object({
     .enum(NPC_EMOTIONS)
     .describe(
       'How YOU, the character speaking, feel as you say this line. Not how the learner feels.',
+    ),
+  // nullish, not nullable: an omitted label must not fail the whole turn. `reply` is what the
+  // learner is waiting for; this field is a record for the report and the scorer. Treating a
+  // missing one as a malformed response would trade a working turn for a data point.
+  learnerEmotion: z
+    .enum(LEARNER_EMOTIONS)
+    .nullish()
+    .describe(
+      'How the LEARNER seems, read only from the OBSERVABLE EXPRESSION line in your ' +
+        'instructions. Null if that line is absent.',
     ),
   reply: z
     .string()

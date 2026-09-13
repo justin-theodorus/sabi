@@ -1,3 +1,4 @@
+import type { ExpressionSummary, LearnerEmotion } from '@/lib/expression/types'
 import type { ModeId, PersonaId, ScenarioId } from '@/lib/prompt/types'
 
 export const SESSION_COOKIE = 'sabi_session'
@@ -56,10 +57,25 @@ export interface IconSelectionPayload {
   readonly npcInitiated: boolean
 }
 
+/**
+ * What the learner's face did during the window that preceded this turn, plus the label the model
+ * gave it. Null when there was no camera, no permission, or no face.
+ *
+ * It rides `npc_response` rather than `icon_selection` because `npc_response` is the one event
+ * written on every turn: an NPC bump has no icon selection (api/dialogue/route.ts passes
+ * `iconSelection: null`), and the silence before a bump is exactly the window worth recording.
+ */
+export interface LearnerExpressionRecord extends ExpressionSummary {
+  readonly learnerEmotion: LearnerEmotion | null
+  readonly sampleCount: number
+}
+
 /** Payload of an `npc_response` event. */
 export interface NpcResponsePayload {
   readonly content: string
   readonly npcEmotion: string
   readonly turnIndex: number
   readonly npcInitiated: boolean
+  /** Phase 3. Absent on rows written before it, so every reader must treat it as optional. */
+  readonly learnerExpression?: LearnerExpressionRecord | null
 }

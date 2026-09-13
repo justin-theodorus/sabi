@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { LEARNER_EMOTIONS } from '@/lib/expression/types'
 import {
   advancePartialReply,
   INITIAL_PARTIAL_STATE,
@@ -9,8 +10,34 @@ import {
   type PartialReplyState,
 } from '@/lib/dialogue/npc-reply'
 
-test('the schema declares emotion before reply, so it streams first', () => {
-  assert.deepEqual(Object.keys(npcReplySchema.shape), ['emotion', 'reply'])
+test('the schema declares both metadata fields before reply, so they survive truncation', () => {
+  // Field order is the emission order. `emotion` first flips the sprite as the NPC starts
+  // speaking; `learnerEmotion` next is the record that a reply truncated at 256 tokens would
+  // otherwise lose. The prose is last because it is the only field that can be long.
+  assert.deepEqual(Object.keys(npcReplySchema.shape), ['emotion', 'learnerEmotion', 'reply'])
+})
+
+test('an omitted learner emotion is accepted, because it must not fail the turn', () => {
+  assert.equal(npcReplySchema.safeParse({ emotion: 'happy', reply: 'hi' }).success, true)
+  assert.equal(
+    npcReplySchema.safeParse({ emotion: 'happy', learnerEmotion: null, reply: 'hi' }).success,
+    true,
+  )
+})
+
+test('the schema accepts every label in the learner vocabulary and rejects the rest', () => {
+  for (const learnerEmotion of LEARNER_EMOTIONS) {
+    const result = npcReplySchema.safeParse({ emotion: 'happy', learnerEmotion, reply: 'hi' })
+    assert.equal(result.success, true, learnerEmotion)
+  }
+  // v1 interpolated whatever string the model returned straight into the next system prompt
+  // (dialogue-engine/main.py:860 into :413), with no enum anywhere on the path.
+  const rejected = npcReplySchema.safeParse({
+    emotion: 'happy',
+    learnerEmotion: 'exasperated',
+    reply: 'hi',
+  })
+  assert.equal(rejected.success, false)
 })
 
 test('the schema rejects an emotion with no sprite', () => {
