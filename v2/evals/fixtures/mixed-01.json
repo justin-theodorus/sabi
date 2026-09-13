@@ -1,0 +1,132 @@
+{
+  "id": "mixed-01",
+  "tier": "mixed",
+  "mode": "learning",
+  "intent": "Polite and appropriate throughout, but when the uncle misunderstands the learner simply repeats the same message rather than rephrasing. Social should sit above strategic. Separation case.",
+  "expect": {
+    "dimensionsAbove": [
+      [
+        "social",
+        "strategic"
+      ]
+    ]
+  },
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "hello",
+          "uncle"
+        ],
+        "translated": "Hello uncle",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hello! What you want?",
+        "npcEmotion": "happy",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "mee"
+        ],
+        "translated": "I want mee",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Mee? Which mee you mean?",
+        "npcEmotion": "confused",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "mee"
+        ],
+        "translated": "I want mee",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hah? Fish ball mee? Chicken mee?",
+        "npcEmotion": "confused",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "mee"
+        ],
+        "translated": "I want mee",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Aiyo. I give you fish ball mee lah.",
+        "npcEmotion": "confused",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "okay",
+          "thank you"
+        ],
+        "translated": "Okay thank you",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Here you go.",
+        "npcEmotion": "neutral",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

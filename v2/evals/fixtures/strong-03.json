@@ -1,0 +1,152 @@
+{
+  "id": "strong-03",
+  "tier": "strong",
+  "mode": "learning",
+  "intent": "Socially excellent and confident, but every message is two icons. Linguistic range is deliberately narrow while social and confidence are strong. Separation case.",
+  "expect": {
+    "dimensionsAbove": [
+      [
+        "social",
+        "linguistic"
+      ],
+      [
+        "confidence",
+        "linguistic"
+      ]
+    ]
+  },
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "hello"
+        ],
+        "translated": "Hello",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hello! What you want?",
+        "npcEmotion": "happy",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "chicken rice"
+        ],
+        "translated": "Chicken rice",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Okay. Drink?",
+        "npcEmotion": "neutral",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "kopi"
+        ],
+        "translated": "Kopi",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Kopi. Anything else?",
+        "npcEmotion": "neutral",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "no",
+          "thanks"
+        ],
+        "translated": "No thanks",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Five dollars.",
+        "npcEmotion": "neutral",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "here"
+        ],
+        "translated": "Here",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Thank you ah.",
+        "npcEmotion": "happy",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "bye"
+        ],
+        "translated": "Bye",
+        "turnIndex": 5,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Come again!",
+        "npcEmotion": "happy",
+        "turnIndex": 5,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

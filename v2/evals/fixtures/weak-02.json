@@ -1,0 +1,131 @@
+{
+  "id": "weak-02",
+  "tier": "weak",
+  "mode": "learning",
+  "intent": "The uncle signals confusion four separate times and the learner never once changes approach. Strategic in particular should be near the floor. Separation case.",
+  "expect": {
+    "dimensionsAbove": [
+      [
+        "operational",
+        "strategic"
+      ]
+    ]
+  },
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "thing"
+        ],
+        "translated": "I want thing",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "What thing? Which one you want?",
+        "npcEmotion": "confused",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "thing"
+        ],
+        "translated": "I want thing",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "I don't understand. Point at what you want?",
+        "npcEmotion": "confused",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "thing"
+        ],
+        "translated": "I want thing",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hah? Say again?",
+        "npcEmotion": "confused",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "thing"
+        ],
+        "translated": "I want thing",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Aiyo, I really cannot understand you.",
+        "npcEmotion": "confused",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "thing"
+        ],
+        "translated": "Thing",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "I give you chicken rice, okay lah.",
+        "npcEmotion": "sad",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

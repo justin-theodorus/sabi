@@ -1,0 +1,149 @@
+{
+  "id": "strong-04",
+  "tier": "strong",
+  "mode": "survival",
+  "intent": "Long, precise, grammatically rich icon combinations, but brusque and demanding throughout with no greeting or thanks. Linguistic and operational should sit above social. Separation case.",
+  "expect": {
+    "dimensionsAbove": [
+      [
+        "linguistic",
+        "social"
+      ],
+      [
+        "operational",
+        "social"
+      ]
+    ]
+  },
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "chicken rice",
+          "and",
+          "kopi",
+          "now"
+        ],
+        "translated": "I want chicken rice and kopi now",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Wah, so fast. Okay, wait ah.",
+        "npcEmotion": "surprised",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "how long",
+          "I want",
+          "it",
+          "fast"
+        ],
+        "translated": "How long? I want it fast",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Two minutes lah. You very hurry.",
+        "npcEmotion": "mad",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "give",
+          "me",
+          "extra",
+          "chilli",
+          "also"
+        ],
+        "translated": "Give me extra chilli also",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Extra chilli. Anything else you demand?",
+        "npcEmotion": "mad",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "no",
+          "just",
+          "give",
+          "me",
+          "the food"
+        ],
+        "translated": "No, just give me the food",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Here. Five dollars fifty.",
+        "npcEmotion": "mad",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "take",
+          "the money",
+          "I go",
+          "now"
+        ],
+        "translated": "Take the money, I go now",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Okay okay. Next customer.",
+        "npcEmotion": "mad",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

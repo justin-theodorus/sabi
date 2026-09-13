@@ -1,0 +1,150 @@
+{
+  "id": "strong-02",
+  "tier": "strong",
+  "mode": "survival",
+  "intent": "Survival mode with an unexpected event mid-session. The learner adapts, rephrases when the stall runs out, and closes the exchange. Strategic should be high because the repair is explicit.",
+  "expect": {},
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "hello",
+          "I want",
+          "noodle"
+        ],
+        "translated": "Hello, I want noodle",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Which noodle? We have many.",
+        "npcEmotion": "confused",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "fish ball",
+          "noodle",
+          "please"
+        ],
+        "translated": "Fish ball noodle please",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Aiyo, fish ball all sold out already!",
+        "npcEmotion": "sad",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "okay",
+          "what",
+          "you have"
+        ],
+        "translated": "Okay, what you have?",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Only chicken noodle left.",
+        "npcEmotion": "neutral",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "chicken",
+          "noodle",
+          "can"
+        ],
+        "translated": "Chicken noodle can",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Good choice. Spicy or not?",
+        "npcEmotion": "happy",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "no",
+          "spicy",
+          "please"
+        ],
+        "translated": "No spicy please",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Not spicy. Four fifty.",
+        "npcEmotion": "neutral",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "thank you"
+        ],
+        "translated": "Thank you",
+        "turnIndex": 5,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Here you go, enjoy!",
+        "npcEmotion": "happy",
+        "turnIndex": 5,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}
