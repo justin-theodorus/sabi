@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import type { ModelCallMeasurement } from '@/lib/ai/measure'
 import type { ModeId, PersonaId, ScenarioId } from '@/lib/prompt/types'
 import {
   HISTORY_LIMIT,
@@ -258,3 +259,42 @@ export async function setScoringState(
        and competence_scores is null
   `
 }
+
+/**
+ * Records what one model call cost. Phase 5.
+ *
+ * Never throws and never rejects: every caller is on a path a learner is waiting on, and a
+ * measurement that cannot be written must not become a turn that cannot be taken. A failure is
+ * logged and dropped, which is a missing row — visible as a gap against the turn count — rather
+ * than a wrong one.
+ *
+ * This writes to `model_calls`, not to the event log. See 0004_model_calls.sql for why that
+ * matters: a row in `session_events` here would silently zero every persona latency sample.
+ */
+export async function recordModelCall(
+  sessionId: string | null,
+  m: ModelCallMeasurement,
+): Promise<void> {
+  try {
+    await db()`
+      insert into model_calls (
+        session_id, route, requested_model_id, resolved_model_id, provider, generation_id,
+        ttft_model_ms, ttft_visible_ms, total_ms,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,
+        cost_usd, finish_reason, metadata_ok
+      ) values (
+        ${sessionId}, ${m.route}, ${m.requestedModelId}, ${m.resolvedModelId}, ${m.provider},
+        ${m.generationId},
+        ${msOrNull(m.ttftModelMs)}, ${msOrNull(m.ttftVisibleMs)}, ${Math.round(m.totalMs)},
+        ${m.inputTokens}, ${m.outputTokens}, ${m.cacheReadTokens}, ${m.cacheWriteTokens},
+        ${m.reasoningTokens},
+        ${m.costUsd}, ${m.finishReason}, ${m.metadataOk}
+      )
+    `
+  } catch (error) {
+    console.error(`[measure] failed to record ${m.route} call:`, (error as Error).message)
+  }
+}
+
+/** The columns are integer milliseconds; the SDK reports fractional ones. */
+const msOrNull = (ms: number | null): number | null => (ms === null ? null : Math.round(ms))
