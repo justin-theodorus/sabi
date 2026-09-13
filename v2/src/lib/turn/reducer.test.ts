@@ -6,6 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import type { AACIcon } from '@/components/AACBoard'
+import { MAX_FRAME_TIMINGS } from '@/lib/expression/frame-cost'
 import { MAX_EXPRESSION_SAMPLES } from '@/lib/expression/schema'
 import { ZERO_SIGNALS } from '@/lib/expression/signals'
 import { BUMP_MS, SURVIVAL_TIMEOUT_MS } from '@/lib/turn/constants'
@@ -382,7 +383,7 @@ test('an off-context verdict costs a heart and still runs the turn', () => {
     { type: 'ICON_SELECTED', icon: icon('tea') },
     { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
   ))
-  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, expression: null, icons: ['tea'], now: T0 + 2000 })
+  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, expression: null, frameTimings: [], icons: ['tea'], now: T0 + 2000 })
   assert.equal(judged.hearts, 4)
   assert.deepEqual(effectKinds(judged), ['logEvent', 'dialogue'])
 })
@@ -393,7 +394,7 @@ test('an off-context verdict on the last heart ends the session without calling 
     { type: 'ICON_SELECTED', icon: icon('tea') },
     { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
   ))
-  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, expression: null, icons: ['tea'], now: T0 + 2000 })
+  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, expression: null, frameTimings: [], icons: ['tea'], now: T0 + 2000 })
   assert.equal(judged.phase, 'over')
   assert.ok(!effectKinds(judged).includes('dialogue'))
   assert.equal(judged.pending.filter((e) => e.kind === 'endSession').length, 1)
@@ -536,6 +537,7 @@ test('survival carries the window through the judge hop', () => {
   ))
   const judged = turnReducer(submitting, {
     type: 'JUDGE_VERDICT',
+    frameTimings: [],
     offContext: false,
     icons: ['tea'],
     expression: [{ at: 0, signals: signals(0.5) }],
@@ -550,4 +552,111 @@ test('an NPC bump sends the silence window, which is the whole signal a bump rea
   assert.equal(bumped.phase, 'bumping')
   assert.equal(dialogueEffect(bumped).expression?.length, 1)
   assert.equal(bumped.expressionWindow.length, 0)
+})
+
+// --- Phase 5: per-frame inference cost -------------------------------------------------------
+
+test('a frame timing is recorded even while a stream is in flight', () => {
+  // EXPRESSION_SAMPLED is dropped outside 'idle' because a sample taken during the NPC's reply is
+  // not "what their face did while composing". A frame still COSTS the same during a stream, so
+  // the cost must be recorded in every phase or the number describes only the quiet moments.
+  const idle = started()
+  const streaming = run(
+    idle,
+    { type: 'ICON_SELECTED', icon: icon('want') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 1000 },
+    { type: 'STREAM_STARTED' },
+  )
+  assert.equal(streaming.phase, 'streaming')
+
+  const timed = turnReducer(streaming, { type: 'FRAME_TIMED', ms: 8.4 })
+  assert.deepEqual(timed.frameTimings, [8.4])
+
+  const sampled = turnReducer(timed, {
+    type: 'EXPRESSION_SAMPLED',
+    signals: ZERO_SIGNALS,
+    now: T0 + 1100,
+  })
+  assert.equal(sampled.expressionWindow.length, 0, 'a mid-stream sample still does not count')
+})
+
+test('a frame that found no face still contributes its cost', () => {
+  // The sampler dispatches FRAME_TIMED unconditionally and EXPRESSION_SAMPLED only on a face, so
+  // this is the reducer half of the guarantee that a camera which never finds a face is measured.
+  const state = turnReducer(started(), { type: 'FRAME_TIMED', ms: 9.1 })
+  assert.deepEqual(state.frameTimings, [9.1])
+  assert.equal(state.expressionWindow.length, 0)
+})
+
+test('frame timings are capped, keeping the most recent', () => {
+  let state = started()
+  for (let i = 0; i < MAX_FRAME_TIMINGS + 50; i += 1) {
+    state = turnReducer(state, { type: 'FRAME_TIMED', ms: i })
+  }
+  assert.equal(state.frameTimings.length, MAX_FRAME_TIMINGS)
+  assert.equal(state.frameTimings.at(-1), MAX_FRAME_TIMINGS + 49)
+})
+
+test('a nonsense duration is refused rather than stored', () => {
+  const state = run(
+    started(),
+    { type: 'FRAME_TIMED', ms: Number.NaN },
+    { type: 'FRAME_TIMED', ms: -1 },
+    { type: 'FRAME_TIMED', ms: 8 },
+  )
+  assert.deepEqual(state.frameTimings, [8])
+})
+
+test('submitting hands the timings to the effect and clears them with the window', () => {
+  const submitted = run(
+    started(),
+    { type: 'FRAME_TIMED', ms: 8 },
+    { type: 'FRAME_TIMED', ms: 9 },
+    { type: 'ICON_SELECTED', icon: icon('want') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 1000 },
+  )
+
+  const dialogue = submitted.pending.find((e): e is Extract<Effect, { kind: 'dialogue' }> =>
+    e.kind === 'dialogue',
+  )
+  assert.deepEqual(dialogue?.frameTimings, [8, 9])
+  assert.deepEqual(
+    submitted.frameTimings,
+    [],
+    'a window is consumed once, so the next turn cannot report this turn frames',
+  )
+})
+
+test('the survival judge detour carries the timings through to the dialogue call', () => {
+  // The same guarantee `icons` and `expression` already have: survival adds a hop, and a hop that
+  // dropped the timings would silently make every survival turn report no frame cost.
+  const judged = run(
+    started('survival'),
+    { type: 'ICON_SELECTED', icon: icon('want') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 1000 },
+    { type: 'STREAM_STARTED' },
+    { type: 'STREAM_METADATA', turnIndex: 1, hearts: 5, npcEmotion: 'happy', completion: null, learnerText: 'want', activeEventLine: null },
+    { type: 'STREAM_FINISHED', now: T0 + 2000 },
+    { type: 'FRAME_TIMED', ms: 11 },
+    { type: 'ICON_SELECTED', icon: icon('tea') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 3000 },
+  )
+
+  const judge = judged.pending.find((e): e is Extract<Effect, { kind: 'judge' }> => e.kind === 'judge')
+  assert.deepEqual(judge?.frameTimings, [11], 'the judge effect carries them')
+
+  const after = turnReducer(judged, {
+    type: 'JUDGE_VERDICT',
+    offContext: false,
+    icons: ['tea'],
+    expression: judge!.expression,
+    frameTimings: judge!.frameTimings,
+    now: T0 + 3100,
+  })
+  // findLast, not find: the first turn's dialogue effect is still queued in this test because
+  // nothing settles it, and it legitimately carries no timings.
+  const dialogue = after.pending.findLast((e): e is Extract<Effect, { kind: 'dialogue' }> =>
+    e.kind === 'dialogue',
+  )
+  assert.deepEqual(dialogue?.frameTimings, [11], 'and hands them to the dialogue call')
 })

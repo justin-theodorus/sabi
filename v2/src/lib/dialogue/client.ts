@@ -1,7 +1,7 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from 'ai'
 
 import type { TurnData, TurnErrorData } from '@/lib/dialogue/stream-types'
-import type { ExpressionSample } from '@/lib/expression/types'
+import type { ExpressionSample, FrameInferenceStats } from '@/lib/expression/types'
 import { TurnFailure } from '@/lib/dialogue/turn-failure'
 
 /**
@@ -33,6 +33,8 @@ export async function streamDialogue(
     npcInitiated: boolean
     /** Ten numbers per second of composing. Never a frame, never a string. */
     expression: readonly ExpressionSample[] | null
+    /** Phase 5. How long the landmarker took per frame on THIS device. Logged, never prompted. */
+    frameInference: FrameInferenceStats | null
   },
   callbacks: DialogueCallbacks,
   signal?: AbortSignal,
@@ -51,7 +53,23 @@ export async function streamDialogue(
 
   callbacks.onStart()
 
-  const chunks = parseJsonEventStream({ stream: response.body, schema: uiMessageChunkSchema })
+  return readTurnStream(response.body, callbacks)
+}
+
+/**
+ * Reads an already-open turn stream. Split out of `streamDialogue` in Phase 5 so the bench
+ * harness reads the wire with the SAME parser the browser does, rather than a second
+ * implementation that could drift from it — which is exactly how v1 ended up with a load test
+ * that read a `translation` key the service had never emitted (locustfile.py:276).
+ *
+ * `streamDialogue` owns the fetch because its URL is relative and only valid in a browser; this
+ * half is transport-agnostic and runs anywhere there is a ReadableStream.
+ */
+export async function readTurnStream(
+  body: ReadableStream<Uint8Array>,
+  callbacks: DialogueCallbacks,
+): Promise<void> {
+  const chunks = parseJsonEventStream({ stream: body, schema: uiMessageChunkSchema })
   const reader = chunks.getReader()
   let failure: TurnFailure['kind'] | null = null
 

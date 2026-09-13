@@ -114,7 +114,12 @@ export function useExpressionSampler(args: {
 
       // detectForVideo requires strictly increasing timestamps; performance.now() is monotonic
       // where Date.now() is not.
-      const signals = sampleFrame(landmarker, video, performance.now())
+      const { signals, inferenceMs } = sampleFrame(landmarker, video, performance.now())
+
+      // Two dispatches, because they answer two different questions. The cost is always recorded;
+      // the sample only counts when a face was actually found, and the reducer additionally drops
+      // it unless the learner is composing.
+      dispatch({ type: 'FRAME_TIMED', ms: inferenceMs })
       if (signals) dispatch({ type: 'EXPRESSION_SAMPLED', signals, now: Date.now() })
     }, EXPRESSION_SAMPLE_MS)
 

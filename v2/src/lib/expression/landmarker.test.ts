@@ -56,12 +56,12 @@ test('a successful load is cached', async () => {
 test('a frame with no face yields no sample, rather than a confident neutral', () => {
   // v1's service returned neutral at 100% for a frame with no face in it
   // (expression-service/main.py:91-93), so "looking away" and "calm" were the same record.
-  assert.equal(sampleFrame(fake(null), {} as HTMLVideoElement, 0), null)
-  assert.equal(sampleFrame(fake([]), {} as HTMLVideoElement, 0), null)
+  assert.equal(sampleFrame(fake(null), {} as HTMLVideoElement, 0).signals, null)
+  assert.equal(sampleFrame(fake([]), {} as HTMLVideoElement, 0).signals, null)
 })
 
 test('a frame with a face yields the reduced signal vector', () => {
-  const signals = sampleFrame(
+  const { signals } = sampleFrame(
     fake([
       { categoryName: 'mouthSmileLeft', score: 0.9 },
       { categoryName: 'mouthSmileRight', score: 0.7 },
@@ -71,4 +71,21 @@ test('a frame with a face yields the reduced signal vector', () => {
   )
   assert.equal(signals?.smile, 0.8)
   assert.equal(signals?.jawOpen, 0)
+})
+
+test('a frame reports what inference cost whether or not it found a face', () => {
+  // Phase 5. The device most worth knowing the cost of is the one whose camera never finds a
+  // face, so a duration that only arrived on success would measure the easy half of the work.
+  const withFace = sampleFrame(
+    fake([{ categoryName: 'mouthSmileLeft', score: 0.9 }]),
+    {} as HTMLVideoElement,
+    0,
+  )
+  const withoutFace = sampleFrame(fake(null), {} as HTMLVideoElement, 0)
+
+  for (const frame of [withFace, withoutFace]) {
+    assert.equal(typeof frame.inferenceMs, 'number')
+    assert.ok(Number.isFinite(frame.inferenceMs), 'inferenceMs must be a real duration')
+    assert.ok(frame.inferenceMs >= 0)
+  }
 })

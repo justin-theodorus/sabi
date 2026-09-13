@@ -1,4 +1,4 @@
-import type { ExpressionSummary, LearnerEmotion } from '@/lib/expression/types'
+import type { ExpressionSummary, FrameInferenceStats, LearnerEmotion } from '@/lib/expression/types'
 import type { ModeId, PersonaId, ScenarioId } from '@/lib/prompt/types'
 
 export const SESSION_COOKIE = 'sabi_session'
@@ -102,4 +102,10 @@ export interface NpcResponsePayload {
   readonly npcInitiated: boolean
   /** Phase 3. Absent on rows written before it, so every reader must treat it as optional. */
   readonly learnerExpression?: LearnerExpressionRecord | null
+  /**
+   * Phase 5. What the face landmarker cost per frame on the learner's own device, for the window
+   * this turn closed. Operator data: written here, read by MEASUREMENTS.md, never prompted.
+   * Absent on every row written before Phase 5, so readers must treat it as optional.
+   */
+  readonly frameInference?: FrameInferenceStats | null
 }

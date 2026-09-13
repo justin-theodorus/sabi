@@ -6,11 +6,11 @@ import type { TurnData } from '@/lib/dialogue/stream-types'
 import { createTurnStream } from '@/lib/dialogue/turn-stream'
 import { SILENCE_PLACEHOLDER, toModelMessages } from '@/lib/dialogue/history'
 import { summarizeExpression } from '@/lib/expression/aggregate'
-import { expressionWindowSchema } from '@/lib/expression/schema'
+import { expressionWindowSchema, frameInferenceSchema } from '@/lib/expression/schema'
 import { parseBody, requireSession } from '@/lib/http'
 import { buildSystemPrompt, sessionCompletion } from '@/lib/prompt/build-system-prompt'
 import { activeEventFor, availableIconLabels, SCENARIOS } from '@/lib/scenario/hawker-centre'
-import { commitTurn, loadHistory } from '@/lib/session/repository'
+import { commitTurn, loadHistory, recordModelCall } from '@/lib/session/repository'
 import type { LearnerExpressionRecord } from '@/lib/session/types'
 import { translateIcons } from '@/lib/translate'
 
@@ -25,6 +25,8 @@ const bodySchema = z.object({
   npcInitiated: z.boolean().default(false),
   // Phase 3. Numbers only — see lib/expression/schema.ts for why that matters.
   expression: expressionWindowSchema,
+  // Phase 5. Operator data: logged beside the turn, never carried toward the prompt.
+  frameInference: frameInferenceSchema,
 })
 
 /**
@@ -45,7 +47,7 @@ export async function POST(request: Request) {
 
   const body = await parseBody(request, bodySchema)
   if (!body.ok) return body.response
-  const { icons, npcInitiated, expression } = body.data
+  const { icons, npcInitiated, expression, frameInference } = body.data
 
   if (icons.length === 0 && !npcInitiated) {
     return Response.json({ error: 'icons must be a non-empty array' }, { status: 400 })
@@ -122,6 +124,10 @@ export async function POST(request: Request) {
           turnIndex: session.turnIndex,
           npcInitiated,
           learnerExpression,
+          // Phase 5. A sibling of learnerExpression rather than a field inside it: that record is
+          // only written when a face was found, and the device most worth knowing the cost of is
+          // the one whose camera never finds one.
+          frameInference,
         },
         hearts: session.hearts,
       })
@@ -136,6 +142,7 @@ export async function POST(request: Request) {
         seq,
       } satisfies TurnData
     },
+    onMeasured: (measurement) => void recordModelCall(session.id, measurement),
   })
 
   return createUIMessageStreamResponse({ stream })

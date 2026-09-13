@@ -44,3 +44,35 @@ export const expressionWindowSchema = z
   .max(MAX_EXPRESSION_SAMPLES)
   .nullable()
   .default(null)
+
+/** A frame cannot plausibly take longer than this; anything above it is a broken clock. */
+const MAX_FRAME_MS = 60_000
+
+/** Cap on the user agent, which is the one string this file's opening rule is broken for. */
+const MAX_DEVICE_CHARS = 200
+
+/**
+ * Phase 5. What the landmarker cost per frame, on the device that ran it.
+ *
+ * `device` is caller-supplied free text, which everything above this line argues against — so it
+ * gets the argument it deserves rather than an exception. It exists because "8ms per frame" is
+ * not a checkable claim without a machine attached, and it is admissible here because it is
+ * write-only with respect to the model: it is inserted into the `npc_response` jsonb payload and
+ * read by MEASUREMENTS.md, and nothing carries it toward a prompt. Verified rather than asserted:
+ * toModelMessages (lib/dialogue/history.ts) reads only `payload.translated` and `payload.content`,
+ * and buildSystemPrompt never receives a payload at all.
+ *
+ * It is bounded anyway, on the same principle as `at` above: unbounded input is unbounded input
+ * whether or not today's code path happens to be safe.
+ */
+export const frameInferenceSchema = z
+  .object({
+    n: z.number().int().min(0).max(100_000),
+    p50: z.number().min(0).max(MAX_FRAME_MS),
+    p95: z.number().min(0).max(MAX_FRAME_MS).nullable(),
+    max: z.number().min(0).max(MAX_FRAME_MS),
+    device: z.string().max(MAX_DEVICE_CHARS),
+    cores: z.number().int().min(0).max(1_024),
+  })
+  .nullable()
+  .default(null)

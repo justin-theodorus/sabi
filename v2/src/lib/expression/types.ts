@@ -83,3 +83,30 @@ export interface ExpressionSummary {
   readonly explanation: string
   readonly avgScore: number
 }
+
+/**
+ * Phase 5. What the face landmarker cost, on the device that actually ran it.
+ *
+ * Deliberately NOT part of ExpressionSummary: that type is byte-pinned into the system prompt by
+ * lib/prompt/parity.test.ts, and this is operator data the model must never see. It is also a
+ * sibling of LearnerExpressionRecord rather than a member of it, because that record is only
+ * written when a face was found — and the device whose cost you most want to know about is the
+ * one where the camera is on and the landmarker never finds one.
+ */
+export interface FrameInferenceStats {
+  /** Frames inferred in the window, whether or not a face was found in them. */
+  readonly n: number
+  readonly p50: number
+  /** Null below the sample floor in lib/measure/stats.ts, never silently the maximum. */
+  readonly p95: number | null
+  readonly max: number
+  /**
+   * The one string on this wire, and the reason the rule is broken for it: "8ms per frame" is not
+   * a checkable claim without a machine attached to it. It is written to a jsonb log column and
+   * read by MEASUREMENTS.md. Nothing interpolates it into a prompt — verified: toModelMessages
+   * reads only `payload.translated` and `payload.content`, and buildSystemPrompt never sees a
+   * payload at all.
+   */
+  readonly device: string
+  readonly cores: number
+}

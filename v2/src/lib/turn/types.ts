@@ -63,8 +63,8 @@ export interface SessionConfig {
  */
 export type Effect =
   | { readonly kind: 'createSession'; readonly id: string }
-  | { readonly kind: 'dialogue'; readonly id: string; readonly icons: readonly string[]; readonly npcInitiated: boolean; readonly expression: ExpressionWindow }
-  | { readonly kind: 'judge'; readonly id: string; readonly learnerText: string; readonly icons: readonly string[]; readonly expression: ExpressionWindow }
+  | { readonly kind: 'dialogue'; readonly id: string; readonly icons: readonly string[]; readonly npcInitiated: boolean; readonly expression: ExpressionWindow; readonly frameTimings: readonly number[] }
+  | { readonly kind: 'judge'; readonly id: string; readonly learnerText: string; readonly icons: readonly string[]; readonly expression: ExpressionWindow; readonly frameTimings: readonly number[] }
   | { readonly kind: 'logEvent'; readonly id: string; readonly type: 'heart_lost' | 'event_fired'; readonly payload: Record<string, unknown> }
   | { readonly kind: 'endSession'; readonly id: string; readonly reason: EndReason }
 
@@ -103,6 +103,13 @@ export interface TurnState {
    * during a turn that errored (finding 3.8).
    */
   readonly expressionWindow: readonly ExpressionSample[]
+  /**
+   * Phase 5. Per-frame landmarker durations, kept separately from expressionWindow because they
+   * are collected under different rules: a sample only counts while the learner is composing AND
+   * a face was found, whereas a frame costs what it costs in either case. Merging them would make
+   * the cost number a measurement of the frames that happened to succeed.
+   */
+  readonly frameTimings: readonly number[]
 
   readonly pending: readonly Effect[]
 
@@ -128,7 +135,7 @@ export type TurnAction =
   | { readonly type: 'ICON_REMOVED'; readonly index: number }
   | { readonly type: 'SELECTION_CLEARED' }
   | { readonly type: 'SUBMIT_REQUESTED'; readonly now: number }
-  | { readonly type: 'JUDGE_VERDICT'; readonly offContext: boolean; readonly icons: readonly string[]; readonly expression: ExpressionWindow; readonly now: number }
+  | { readonly type: 'JUDGE_VERDICT'; readonly offContext: boolean; readonly icons: readonly string[]; readonly expression: ExpressionWindow; readonly frameTimings: readonly number[]; readonly now: number }
   | { readonly type: 'STREAM_STARTED' }
   | { readonly type: 'STREAM_DELTA'; readonly text: string }
   | { readonly type: 'STREAM_METADATA'; readonly turnIndex: number; readonly hearts: number; readonly npcEmotion: NpcEmotion; readonly completion: CompletionReason | null; readonly learnerText: string; readonly activeEventLine: string | null }
@@ -138,4 +145,5 @@ export type TurnAction =
   | { readonly type: 'END_REQUESTED'; readonly reason: EndReason }
   | { readonly type: 'EFFECT_SETTLED'; readonly id: string }
   | { readonly type: 'EXPRESSION_SAMPLED'; readonly signals: Signals; readonly now: number }
+  | { readonly type: 'FRAME_TIMED'; readonly ms: number }
   | { readonly type: 'TICK'; readonly now: number }

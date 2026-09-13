@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 
 import { streamDialogue } from '@/lib/dialogue/client'
+import { describeDevice, summarizeFrameCost } from '@/lib/expression/frame-cost'
 import { toTurnErrorKind } from '@/lib/dialogue/turn-failure'
 import { initialState, turnReducer } from '@/lib/turn/reducer'
 import { TICK_MS } from '@/lib/turn/constants'
@@ -75,13 +76,22 @@ export function useTurn(config: SessionConfig) {
             offContext,
             icons: effect.icons,
             expression: effect.expression,
+            frameTimings: effect.frameTimings,
             now: Date.now(),
           }
         }
 
         case 'dialogue': {
           await streamDialogue(
-            { icons: effect.icons, npcInitiated: effect.npcInitiated, expression: effect.expression },
+            {
+              icons: effect.icons,
+              npcInitiated: effect.npcInitiated,
+              expression: effect.expression,
+              // Summarised here rather than in the reducer: this reads `navigator`, and the
+              // reducer is pure by contract (see the header of reducer.ts). The effect runner is
+              // where I/O already lives, so it is where the device gets named.
+              frameInference: summarizeFrameCost(effect.frameTimings, describeDevice()),
+            },
             {
               onStart: () => dispatch({ type: 'STREAM_STARTED' }),
               onDelta: (text) => dispatch({ type: 'STREAM_DELTA', text }),

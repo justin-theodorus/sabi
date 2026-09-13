@@ -65,12 +65,27 @@ export function loadLandmarker(
  * v1's equivalent could not express this: expression-service returned neutral at 100% for a frame
  * with no face in it (main.py:91-93), so "looking away" and "calm" were the same record.
  */
+export interface FrameSample {
+  readonly signals: Signals | null
+  /** Phase 5. What `detectForVideo` itself cost, on whatever device this is. */
+  readonly inferenceMs: number
+}
+
 export function sampleFrame(
   landmarker: FaceLandmarker,
   video: HTMLVideoElement,
   timestampMs: number,
-): Signals | null {
+): FrameSample {
+  // Timed around the wasm call and nothing else. A no-face frame costs the same inference as a
+  // face-ful one, so the duration is returned either way — reporting only the successful frames
+  // would measure the easy half of the workload.
+  const startedAt = performance.now()
   const result = landmarker.detectForVideo(video, timestampMs)
+  const inferenceMs = performance.now() - startedAt
+
   const categories = result.faceBlendshapes[0]?.categories
-  return categories && categories.length > 0 ? toSignals(categories) : null
+  return {
+    signals: categories && categories.length > 0 ? toSignals(categories) : null,
+    inferenceMs,
+  }
 }

@@ -21,6 +21,7 @@
 //    bumps alone.
 
 import { MAX_EXPRESSION_SAMPLES } from '@/lib/expression/schema'
+import { MAX_FRAME_TIMINGS } from '@/lib/expression/frame-cost'
 import { BUMP_MS, MAX_HEARTS, SURVIVAL_TIMEOUT_MS } from '@/lib/turn/constants'
 import type {
   Effect,
@@ -47,6 +48,7 @@ export function initialState(config: SessionConfig, now: number): TurnState {
     lastActivityAt: now,
     timeoutCharged: false,
     expressionWindow: [],
+    frameTimings: [],
     pending: [],
     effectSeq: 0,
   }
@@ -82,15 +84,22 @@ const touch = (state: TurnState, now: number): TurnState => ({
  */
 function takeExpression(state: TurnState): {
   readonly expression: ExpressionWindow
+  readonly frameTimings: readonly number[]
   readonly cleared: TurnState
 } {
-  const cleared: TurnState = { ...state, expressionWindow: [] }
+  // Both windows are consumed and cleared together. They are collected under different rules but
+  // they describe the same stretch of wall clock, so a turn that takes one must take both or the
+  // next turn would report this turn's frame costs.
+  const cleared: TurnState = { ...state, expressionWindow: [], frameTimings: [] }
+  const frameTimings = state.frameTimings
+
   const window = state.expressionWindow
-  if (window.length === 0) return { expression: null, cleared }
+  if (window.length === 0) return { expression: null, frameTimings, cleared }
 
   const base = window[0].at
   return {
     expression: window.map((sample) => ({ at: sample.at - base, signals: sample.signals })),
+    frameTimings,
     cleared,
   }
 }
@@ -137,7 +146,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
       if (state.phase !== 'idle' || state.selected.length === 0) return state
 
       const icons = state.selected.map((icon) => icon.label)
-      const { expression, cleared } = takeExpression(state)
+      const { expression, frameTimings, cleared } = takeExpression(state)
       const next = { ...touch(cleared, action.now), phase: 'submitting' as const, error: null }
 
       // Survival gates the turn on the off-context judge, which may cost a heart before the
@@ -152,6 +161,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
           learnerText: icons.join(' '),
           icons,
           expression,
+          frameTimings,
         })
       }
 
@@ -161,6 +171,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         icons,
         npcInitiated: false,
         expression,
+        frameTimings,
       })
     }
 
@@ -183,6 +194,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         icons: action.icons,
         npcInitiated: false,
         expression: action.expression,
+        frameTimings: action.frameTimings,
       })
     }
 
@@ -300,6 +312,17 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
       }
     }
 
+    case 'FRAME_TIMED': {
+      // Unconditional, and deliberately so. EXPRESSION_SAMPLED above is dropped unless the learner
+      // is composing and a face was found; a frame costs the landmarker the same either way, and
+      // the device whose cost is most worth knowing is the one that never finds a face. Gating
+      // this on either condition would measure only the frames that went well.
+      if (!Number.isFinite(action.ms) || action.ms < 0) return state
+
+      const timings = [...state.frameTimings, action.ms]
+      return { ...state, frameTimings: timings.slice(-MAX_FRAME_TIMINGS) }
+    }
+
     case 'TICK':
       return tick(state, action.now)
 
@@ -350,10 +373,17 @@ function tick(state: TurnState, now: number): TurnState {
   if (silent >= BUMP_MS[state.config.mode]) {
     // The silence itself is the window worth sending: a bump is the NPC reacting to someone who
     // has stopped, and what their face did while stopping is the whole signal.
-    const { expression, cleared } = takeExpression(state)
+    const { expression, frameTimings, cleared } = takeExpression(state)
     return enqueue(
       { ...cleared, phase: 'bumping', lastActivityAt: now },
-      { kind: 'dialogue', id: effectId(state, 'bump'), icons: [], npcInitiated: true, expression },
+      {
+        kind: 'dialogue',
+        id: effectId(state, 'bump'),
+        icons: [],
+        npcInitiated: true,
+        expression,
+        frameTimings,
+      },
     )
   }
 
