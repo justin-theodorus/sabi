@@ -58,16 +58,22 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 
 ## Operational
 
-- **AI Gateway needs a card on the Vercel team before it will serve requests.** OIDC auth already
-  works; the gateway returns 403 `customer_verification_required` until then. v2 runs on the
-  direct Anthropic key meanwhile via `SABI_MODEL_PROVIDER=anthropic`
-  (`v2/src/lib/ai/model.ts`). Switching back is deleting that one env var — worth doing before
-  Phase 5, which wants the gateway's per-request token and cost numbers.
+- **AI Gateway — RESOLVED in Phase 5.** The 403 is gone. Production carries no
+  `SABI_MODEL_PROVIDER`, no `ANTHROPIC_API_KEY` and no `AI_GATEWAY_API_KEY`, so it already took the
+  default gateway path via OIDC; every figure in `MEASUREMENTS.md` came through it. On a streaming
+  request the gateway returns `cost`, `generationId` and the input/output cost split inline in the
+  final chunk, so no `getGenerationInfo` round trip is needed. The env var stays as an escape
+  hatch.
 - **Vercel preview URLs sit behind SSO.** The production alias is public, but branch and PR
   previews hit a Vercel login wall, which cuts against the plan's "no auth wall" goal. Untouched
-  so far because it is a project security setting.
-- **NPC sprites are ~2.4MB each, 14MB total.** Served through `next/image`, so they are optimised
-  on delivery, but the source assets are worth compressing before Phase 5 measures anything.
+  so far because it is a project security setting. Confirmed in Phase 5: the alias returns 200 with
+  no auth markers, a per-deployment URL 302s to the login wall. The bench therefore targets the
+  alias, never a deployment URL.
+- **NPC sprites — MEASURED in Phase 5, and deliberately NOT compressed.** `next/image` delivers
+  `happy.png` at 103,196 bytes of webp against a 2,574,362 byte source: a 96% reduction that is
+  already happening. Compressing the sources would save the learner nothing and would shrink only
+  the deploy upload; v1's copies are byte-identical and frozen, so the repo does not shrink either.
+  This note assumed a cost that delivery optimisation had already removed.
 
 ## Surfaced by Phase 2, deferred on purpose
 
@@ -360,3 +366,89 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 
 - **iPad is still inferred, not measured.** Unchanged from Phase 3. Phase 4 added a server-rendered
   report page with no client JavaScript of its own, so it changes nothing about the tablet story.
+
+## Resolved by Phase 5
+
+- **`MEASUREMENTS.md` exists.** p50/p95 TTFT and time-to-complete-turn on the deployed app, tokens
+  and cost per turn and per session, per-frame inference cost, and the method for each. The four
+  BACKLOG entries that ended "Phase 5 measures properly" are discharged, and section 6 states
+  plainly that the Phase 1-4 figures are not comparable to each other or to anything since.
+
+- **CI had never run, and neither of its jobs would have passed.** Two separate defects, both found
+  by pushing:
+  - `npm run typecheck` failed on `layout.tsx:16` from a clean checkout, as BACKLOG predicted.
+    Fixed with `"pretypecheck": "next typegen"`.
+  - **The `v1-frozen` gate was itself broken.** `git fetch origin main --depth=0` aborts with
+    "fatal: depth 0 is not a positive number", so the job exited 128 before reaching the diff. The
+    gate enforcing the rebuild's one hard constraint had never evaluated it once. Both fixed; both
+    jobs now pass.
+
+- **A model_call row in `session_events` would have silently corrupted persona classification.**
+  `sessionMetrics` pairs events by strict array adjacency, so any row between an `npc_response` and
+  the following `icon_selection` erases every latency sample. `avgResponseLatencyMs` then falls back
+  to 0, which the classifier reads as "very fast" rather than "unknown": a hesitant learner on a 25s
+  think time stops being `shy_chick` ("needs confidence building") and becomes `curious_monkey`,
+  reported at full confidence. Found while choosing where measurement data lives. It is why
+  `model_calls` is its own table. `sessionMetrics` is now extracted to `lib/session/metrics.ts` and
+  the assumption is pinned by tests, including one asserting `EVENT_TYPES` is unchanged.
+
+- **`/api/judge` had no `maxDuration`** while making a model call bounded at 30s under a shorter
+  platform default. A truncated judge call is a heart not charged, and it would have censored that
+  route's own slow tail. Now 60, matching the other model routes.
+
+- **Open decision 4 — session recording to Blob: DECLINED, with the reasoning recorded.** It costs
+  storage and adds an orphan-write failure mode of exactly the shape of v1's `S10`, in a phase whose
+  subject is measurement. v1's finding `2.7` was already "three ways to serve one video". The
+  report's per-turn emotion timeline on a real clock from `session_events.created_at` carries more
+  clinical signal than a recording would, and it already exists. Declining on a stated ground is a
+  result; leaving it silent is not.
+
+- **Where the v2 load test lives: `v2/bench/`, and the plan conflicted with the freeze.** The plan
+  said "tests/locust kept; extended in Phase 5 to load-test v2", but `tests/` is on the v1-frozen
+  path list, so extending it in place fails the gate. The locust file is untouched. Its
+  `translation`-key defect is carried forward as a design rule instead: `bench/assert.ts` has no
+  defaults and no fallbacks, and a shape it does not recognise stops the run.
+
+- **"Delete or correct any surviving comment that asserts a number nobody measured" also conflicted
+  with the freeze.** All six of v1's claims live in frozen paths. They are superseded in
+  `MEASUREMENTS.md` section 7 rather than edited. v2's own three were corrected in place.
+
+- **One of v2's own comments was wrong by 3.5x.** `constants.ts` claimed "~8ms of inference per
+  frame ... under 1% of a core" from the Phase 3 spike. Measured on the deployed build: ~29ms p50,
+  so nearer 3% of a core. The conclusion survives, the number did not. The Phase 3 spike's method
+  was never written down, so this replaces it rather than refuting it.
+
+- **The structured-output TTFT cost is isolated at last: 306ms at p50.** Not an A/B across two runs
+  on different days, but the difference between the model's first token (696ms) and the first token
+  a learner can see (1002ms), recorded on the same call. It sits inside Phase 2's estimated
+  200-500ms range.
+
+## Surfaced by Phase 5, deferred on purpose
+
+- **Prompt caching is untried, and it is the obvious lever.** `cache_read_tokens` and
+  `cache_write_tokens` were zero on all 42 measured calls. Input outweighs output roughly 27 to 1
+  (mean 1152 in, 43 out) because the system prompt, the scenario and up to twelve turns of history
+  are re-sent every turn. Nothing in this phase's scope, but it is where the cost is.
+
+- **Every latency figure carries ~300ms of Pacific.** Functions run in `iad1` and the measurements
+  were taken from Singapore. `POST /api/translate` — pure function, no I/O, no model — measures the
+  transport at p50 293ms, so a client near the function would see roughly 1000ms rather than
+  1317ms. Both numbers are real; neither is quotable without saying where the client was. A run
+  from a US-East host would settle it.
+
+- **No contended run has been taken.** Everything is `--concurrency=1`. The harness supports higher
+  concurrency and writes a separate result file for it, deliberately, so a contended run can never
+  be averaged into the headline numbers.
+
+- **Per-frame cost was measured against a canvas-sourced stream, not a hardware webcam**, and only
+  on an M-series Mac. Tablets remain unmeasured, unchanged from Phase 3 — but the mechanism is now
+  device-agnostic and self-reporting, so opening the production alias on any device and playing one
+  session lands the numbers in the database without further tooling.
+
+- **The bench adds real sessions and real public reports to production.** Unavoidable without adding
+  request surface, which this phase declines to do. Mitigated instead: every session id a run
+  creates is written into its result file, so the rows are enumerable rather than anonymous.
+
+- **Survival-mode cost is inferred, not observed.** `/api/judge` is instrumented, but no survival
+  session appears in the committed run, so per-session cost for survival is extrapolated from the
+  per-call figures.
