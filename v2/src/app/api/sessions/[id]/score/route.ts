@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { classifyModelError } from '@/lib/ai/errors'
+import { buildEmotionSummary } from '@/lib/expression/session-summary'
 import { jsonError, requireSession } from '@/lib/http'
 import { NotEnoughTurnsError, scoreSession } from '@/lib/scoring/score-session'
 import { buildScoringTranscript } from '@/lib/scoring/transcript'
@@ -43,10 +44,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ scores: auth.session.competenceScores, cached: true })
   }
 
-  const turns = buildScoringTranscript(await loadAllEvents(auth.session.id))
+  const events = await loadAllEvents(auth.session.id)
+  const turns = buildScoringTranscript(events)
 
   try {
-    const scores = await scoreSession({ scenarioId: auth.session.scenarioId, turns })
+    const scores = await scoreSession({
+      scenarioId: auth.session.scenarioId,
+      turns,
+      // Phase 3. Null for any session recorded before it, and for any session run without a
+      // camera, which the prompt already renders as "Not available".
+      emotionSummary: buildEmotionSummary(events),
+    })
     await saveCompetenceScores(auth.session.id, scores)
 
     return NextResponse.json({ scores, cached: false })
