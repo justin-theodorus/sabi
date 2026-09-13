@@ -18,5 +18,12 @@ export const MAX_HEARTS = 5
 export const TICK_MS = 1_000
 
 /** Webcam sample rate, matching v1's useEmotionCapture.ts:121. README.md:233 claimed 500ms and was
- *  wrong about v1 too. At ~8ms of inference per frame this is under 1% of a core. */
+ *  wrong about v1 too.
+ *
+ *  MEASURED in Phase 5, against the deployed build, and the number this comment used to carry was
+ *  wrong by 3.5x. It said "~8ms of inference per frame ... under 1% of a core", inherited from the
+ *  Phase 3 spike. The landmarker actually costs ~29ms per frame at p50 on an M-series Mac (81
+ *  frames, headless and headed agreeing to within 2ms), so at 1 Hz this is nearer 3% of a core.
+ *  Still affordable, which is what the sample rate rests on — but see MEASUREMENTS.md section 4
+ *  rather than trusting the round number that used to be here. */
 export const EXPRESSION_SAMPLE_MS = 1_000

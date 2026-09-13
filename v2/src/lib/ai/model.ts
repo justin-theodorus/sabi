@@ -5,14 +5,21 @@ import type { LanguageModel } from 'ai'
  * Where model calls go.
  *
  * Default is Vercel AI Gateway, which is the choice that matters: it reports tokens and cost per
- * request with no instrumentation, which is what Phase 5 needs, and it makes "compare a bigger
- * model for scoring" a string change rather than a code change. On Vercel, OIDC authenticates it
- * and there is no key in the environment at all.
+ * request, and it makes "compare a bigger model for scoring" a string change rather than a code
+ * change. On Vercel, OIDC authenticates it and there is no key in the environment at all.
  *
- * The gateway refuses requests until the Vercel team has a card on file, so
- * SABI_MODEL_PROVIDER=anthropic routes straight to Anthropic with ANTHROPIC_API_KEY instead. The
- * AI SDK abstracts the provider, so this is the whole of the difference — nothing downstream
- * knows which path it took.
+ * This docblock used to claim the gateway gives that "with no instrumentation". Phase 5 corrected
+ * it: the gateway reports the numbers, but something has to read them, attribute them to a session
+ * and store them, and that took lib/ai/measure.ts, the model_calls table, and a hook at all three
+ * call sites. What the gateway saves is the pricing table and the arithmetic, not the plumbing.
+ * `providerMetadata` is also typed JSONValue, so the shape it reports is parsed rather than
+ * trusted — see lib/ai/measure.ts.
+ *
+ * The gateway refused requests until the Vercel team had a card on file (403
+ * customer_verification_required), which is why SABI_MODEL_PROVIDER=anthropic exists to route
+ * straight to Anthropic with ANTHROPIC_API_KEY instead. That is resolved: production runs on the
+ * gateway and every figure in MEASUREMENTS.md came through it. The escape hatch stays, because the
+ * AI SDK abstracts the provider and nothing downstream knows which path it took.
  */
 export type ModelProvider = 'gateway' | 'anthropic'
 

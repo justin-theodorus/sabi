@@ -21,8 +21,17 @@
 // learner seemed this turn, it feeds the report and the scoring prompt, and after `reply` it would
 // be the first thing a truncated response lost. It costs two short fields ahead of the prose.
 // Phase 2 measured that moving `reply` to the front did NOT recover TTFT (1925ms median against a
-// 1650-1949ms range), so field order is not the lever latency turns on here — but it is measured
-// again in this phase rather than assumed.
+// 1650-1949ms range), so field order is not the lever latency turns on here.
+//
+// Phase 5 MEASURED WHAT IT ACTUALLY COSTS, per call rather than by comparing two runs on different
+// days. Every dialogue call now records both the model's first token and the first token a learner
+// can see, so the price of these short fields is the difference between two numbers on the same
+// request: 696ms to the model's first token, 1002ms to the learner's, so **306ms at p50** spent
+// emitting `{"emotion":"…","farewell":…` before the prose begins (MEASUREMENTS.md section 2.4).
+//
+// That is a real cost, it sits inside Phase 2's estimated 200-500ms, and the fields stay anyway:
+// each one exists because the alternative was deriving the same signal from the finished prose,
+// which is finding 2.9 and finding S11. 306ms buys the deletion of two whole classes of guessing.
 //
 // `farewell` (Phase 4) is the same move a third time, for finding S11. v1 decided the conversation
 // was over by searching the finished prose for a scenario-specific substring
@@ -31,7 +40,7 @@
 // empty list and could never complete at all. It is the same brittleness class as 2.9, and the
 // same answer applies: the model already knows whether it just said goodbye, so ask it in the call
 // that is already happening instead of guessing from the output afterwards. It is a single boolean
-// ahead of the prose, and the TTFT cost is measured rather than assumed.
+// ahead of the prose, and its share of the 306ms above is measured rather than assumed.
 
 import { z } from 'zod'
 

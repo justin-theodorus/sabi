@@ -6,9 +6,17 @@
 // read straight off the video element into wasm and the only thing that leaves the device is ten
 // numbers per second.
 //
-// Spike numbers behind the choice (Chromium, 640x480, face at 8.5% of frame):
+// Spike numbers behind the choice (Chromium, 640x480, face at 8.5% of frame), taken during Phase 3
+// on an M-series Mac by a method that was never written down:
 //   MediaPipe blendshapes   p50  8.4ms/frame (CPU delegate), ~7.0MB of assets, face detection included
 //   ONNX ViT via transformers.js  p50 676ms/frame (q8/wasm), 50-87MB of model, needs its own detector
+//
+// The MediaPipe figure did NOT reproduce. Phase 5 measured the deployed build in situ at ~29ms
+// p50 per frame (MEASUREMENTS.md section 4), so treat 8.4ms as unreproduced rather than as a
+// baseline. The ONNX figure has not been re-measured at all and is spike-only.
+//
+// The decision survives either way: the gap between the two candidates is two orders of magnitude,
+// and 29ms against 676ms is the same conclusion as 8.4ms against 676ms.
 // CPU beat GPU (8.4 vs 10.4ms) because the model is small enough that texture upload dominates,
 // so there is no WebGL context here and nothing to go wrong on a tablet driver.
 //
