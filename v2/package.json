@@ -11,6 +11,7 @@
     "lint": "eslint",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "db:migrate": "tsx --env-file=.env.local db/migrate.ts",
+    "pretypecheck": "next typegen",
     "typecheck": "tsc --noEmit",
     "eval": "tsx --env-file=.env.local evals/run.ts"
   },
