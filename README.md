@@ -1,323 +1,180 @@
-# SABI — AI-Powered AAC Communication Training Platform
+# SABI
 
-SABI is an AI-driven communication training platform for individuals with communication difficulties (AAC users, children with autism, speech-language delays). Learners practice social scenarios by selecting pictogram icons; a large language model generates dynamic, persona-adaptive NPC dialogue in real time. Therapists review session recordings, emotion timelines, and communication competence scores.
+AI-powered communication training for AAC users. A learner taps pictogram icons to build a
+sentence; an LLM plays a hawker stall uncle who responds in character, adapts to how the learner is
+communicating, and reacts to what their face is doing. When the session ends, a public link shows
+the transcript, an emotion timeline and a communication competence score.
 
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Services](#services)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [User Roles & Flows](#user-roles--flows)
-- [Key Features](#key-features)
-- [Figma Design Reference](#figma-design-reference)
-- [Development Guide](#development-guide)
-- [Phased Build Plan](#phased-build-plan)
+**Live: <https://sabi-lyart.vercel.app>**. No sign-in, by design.
 
 ---
 
-## Overview
+## This repository contains two systems
 
-### Problem
-
-Individuals using Augmentative and Alternative Communication (AAC) devices lack access to realistic, adaptive training environments. Existing tools rely on fixed scripts and pre-defined dialogue flows — they don't reflect the unpredictable nature of real social interactions.
-
-### Solution
-
-SABI simulates realistic social scenarios with an LLM-powered NPC that responds dynamically to the learner's icon selections. A rules-based persona engine classifies each learner's communication style and injects persona modifiers into every LLM prompt, making dialogue adaptive and personalised.
-
-### Target Users
-
-| Role | Description |
+| | |
 |---|---|
-| **Learner** | Individuals with communication difficulties practising social scenarios |
-| **Therapist / Caregiver** | Speech-language therapists who assign scenarios, monitor progress, and review session reports |
+| **`v2/`** | One Next.js app on Vercel. This is what runs at the URL above. |
+| everything else | **v1**: seven services, a Kong gateway, a BullMQ queue, Redis, MinIO and 905 lines of Kubernetes. Frozen, still runnable with `docker compose up`, and deliberately not deleted. |
+
+v2 is a rebuild of v1, not a new project. It was preceded by a line-by-line audit of v1 that found
+three CRITICAL security defects, four disagreeing concurrency limits, six performance claims that
+nobody had ever measured, and zero tests. The rebuild is additive: no v1 file is moved, renamed or
+edited, and CI fails if one changes.
+
+**Read [DECISIONS.md](DECISIONS.md) for what changed and why, [ARCHITECTURE.md](ARCHITECTURE.md)
+for how v2 works, and [MEASUREMENTS.md](MEASUREMENTS.md) for the numbers.**
 
 ---
 
-## Architecture
+## What v2 does
 
-Microservices orchestrated via Docker Compose. Auth and database are hosted on Supabase (no local Postgres or auth containers). All client traffic routes through a Kong API Gateway.
+- One scenario: ordering food at a Singapore hawker centre.
+- An AAC board of 128 icons across three categories, plus scenario-specific items.
+- Learning mode and Survival mode. Survival adds hearts, a 30-second timer, and an off-context
+  check that can cost a heart.
+- Streamed NPC dialogue with the NPC's own emotion driving its sprite.
+- Client-side facial expression capture at 1 Hz. **Frames never leave the device**; ten numbers per
+  second do, and they are summarised into one line of the model's prompt.
+- A public session report: transcript, per-turn emotion timeline, competence radar.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        Frontend                         │
-│                  Next.js PWA  :3000                     │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-                   Kong Gateway :8000
-                        │
-        ┌───────────────┼───────────────────────┐
-        │               │               │       │
-  dialogue-queue   session-service  persona-  aac-icon-
-     :8006           :8004         engine     service
-        │                            :8002      :8005
-  dialogue-engine
-     :8001 (internal)
-        │
-   expression-service
-        :8003
-        │
-┌───────┴───────┐
-│     Redis     │   MinIO (S3)
-│    :6379      │   :9000 / :9001
-└───────────────┘
-        │
-   Supabase (hosted)
-   PostgreSQL + Auth
-```
+### Measured, on the deployed app
 
----
-
-## Services
-
-| Service | Tech | Port | Responsibility |
-|---|---|---|---|
-| `frontend` | Next.js PWA | 3000 | Learner scenario UI, AAC board, therapist dashboard |
-| `kong` | Kong Gateway 3.6 | 8000 | Single API entry point for all client traffic |
-| `dialogue-engine` | Python / FastAPI | 8001 (internal) | Claude API orchestration, ElevenLabs TTS |
-| `dialogue-queue-api` | Node.js | 8006 | Queues Claude calls; returns `request_id` for polling |
-| `dialogue-queue-worker` | Node.js | — | Consumes queue, calls dialogue-engine concurrently |
-| `persona-engine` | Python / FastAPI | 8002 | Rules-based learner persona classification |
-| `expression-service` | Python / FastAPI | 8003 | DeepFace emotion detection from webcam JPEG frames |
-| `session-service` | Node.js / Express | 8004 | Session event logging, MinIO video upload |
-| `aac-icon-service` | Node.js / Express | 8005 | Icon-to-natural-language translation before LLM call |
-| `redis` | Redis 7 | 6379 | Real-time session state shared across services |
-| `minio` | MinIO | 9000/9001 | Local S3-compatible storage for session WebM videos |
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Node.js 18+ (for running scripts outside Docker)
-- A `.env` file at the project root (see [Environment Variables](#environment-variables))
-
-### 1. Clone and configure
-
-```bash
-git clone <repo-url> sabi
-cd sabi
-cp .env.example .env   # fill in your secrets
-```
-
-### 2. Pre-fetch AAC icons (run once)
-
-Icons are fetched from ARASAAC at build time and stored locally. They are **never** loaded at runtime.
-
-```bash
-node scripts/fetch-icons.js
-```
-
-Icons are written to `frontend/public/icons/`.
-
-### 3. Start all services
-
-```bash
-docker-compose up --build
-```
-
-| URL | Service |
+| | |
 |---|---|
-| http://localhost:3000 | Frontend (learner & therapist UI) |
-| http://localhost:8000 | Kong API Gateway |
-| http://localhost:9001 | MinIO Console (minioadmin / minioadmin) |
+| time to first token, as the learner sees it | p50 1317ms, p95 1649ms |
+| time to complete a turn | p50 1454ms, p95 1803ms |
+| cost | $0.0014 per turn, $0.0100 per scored session |
+| on-device inference | ~29ms per frame at 1 Hz |
 
-### 4. Start a specific service
-
-```bash
-docker-compose up frontend dialogue-engine
-```
+Method, sample sizes and caveats in [MEASUREMENTS.md](MEASUREMENTS.md). Roughly 300ms of each
+latency figure is the Pacific: functions run in `iad1` and the measurements were taken from
+Singapore.
 
 ---
 
-## Environment Variables
+## Running v2
 
-Create a `.env` file at the project root:
+```bash
+cd v2
+npm install
+cp .env.local.example .env.local   # or: vercel env pull v2/.env.local --yes
+npm run db:migrate
+npm run dev
+```
+
+| command | what it does |
+|---|---|
+| `npm test` | 323 unit tests, offline, no model calls |
+| `npm run typecheck` | runs `next typegen` first, then `tsc --noEmit` |
+| `npm run lint` | eslint |
+| `npm run eval` | scoring evals against a real model. **Costs money.** |
+| `npm run bench -- --url=<url>` | latency bench against a deployed app. **Costs money.** |
+| `npm run bench:cost` | reads tokens and cost back out of `model_calls` |
+
+`evals/` and `bench/` sit outside `src/` on purpose, so `npm test` cannot reach them and an ordinary
+push can never spend money.
+
+### Environment
 
 ```env
-# Claude API — dialogue-engine
-ANTHROPIC_API_KEY=
-
-# ElevenLabs TTS — dialogue-engine
-ELEVENLABS_API_KEY=
-
-# Supabase — all services
-SUPABASE_URL=
-SUPABASE_PUBLISHABLE_KEY=   # safe to expose via NEXT_PUBLIC_*
-SUPABASE_SECRET_KEY=        # backend only — never expose to frontend
-```
-
-MinIO credentials for local dev: `minioadmin` / `minioadmin` (hardcoded in `docker-compose.yml`).
-
----
-
-## User Roles & Flows
-
-### Learner Flow
-
-```
-1. Open PWA on iPad / browser → log in
-2. First session only: 3–5 min preliminary phase
-   └─ Persona Engine classifies communication style
-3. Load assigned scenario (background + NPC introduction)
-4. NPC asks opening question
-5. Learner taps icons on AAC grid → submits combination
-6. aac-icon-service translates icons to natural language
-7. dialogue-queue-api enqueues Claude call → worker calls dialogue-engine
-8. dialogue-engine constructs prompt (scenario + persona + history) → Claude API
-9. NPC response rendered on screen (+ optional ElevenLabs TTS)
-10. Repeat until scenario wrap-up → session logged
-```
-
-### Therapist Flow
-
-```
-1. Log in with therapist credentials
-2. View list of assigned learners
-3. Review past session transcripts, icon selections, emotion timeline
-4. View learner's persona classification and competence radar chart
-5. Assign a scenario for the learner's next session
-6. Watch session replay with emotion emoji overlay synced to video
+DATABASE_URL=              # Neon Postgres
+AI_GATEWAY_API_KEY=        # local only; on Vercel, OIDC authenticates the gateway
+ANTHROPIC_API_KEY=         # only needed with SABI_MODEL_PROVIDER=anthropic
+SABI_MODEL_PROVIDER=       # unset for the AI Gateway (default); 'anthropic' to bypass it
+SABI_SCORING_MODEL=        # optional override, used by `npm run eval -- --model=<id>`
 ```
 
 ---
 
-## Key Features
+## Running v1
 
-### AAC Icon Grid
+Still works. Eleven containers, verified rather than assumed.
 
-- Categories: Core Words (white), Social (green), Emotions (pink/red), Actions (orange), People (blue), Descriptors (yellow)
-- Icons are filtered per scenario — not all icons shown in all contexts
-- Selected icons accumulate in a message bar before submission
+```bash
+cp .env.example .env      # ANTHROPIC_API_KEY, ELEVENLABS_API_KEY, SUPABASE_*
+node scripts/fetch-icons.js
+docker compose up --build
+```
 
-### Persona Engine (Rules-Based)
-
-Classifies learners into one of three types based on response latency, re-prompt count, and icon combo complexity:
-
-| Persona | Description |
+| URL | |
 |---|---|
-| **Guided Learner** | Slow responses, frequent re-prompts, simple icon combos |
-| **Social Practice Learner** | Average speed, varied icon usage |
-| **Independent Communicator** | Fast, complex combos, minimal re-prompts |
+| http://localhost:3000 | frontend |
+| http://localhost:8000 | Kong gateway |
+| http://localhost:9001 | MinIO console (`minioadmin` / `minioadmin`) |
 
-Persona is stored in `LearnerProfile` and injected as a system prompt modifier on all subsequent sessions.
+### v1 services
 
-### Learning Mode vs Survival Mode
+| Service | Tech | Port | Lines |
+|---|---|---|---|
+| `frontend` | Next.js 14 | 3000 | 7,906 |
+| `kong` | Kong 3.6 | 8000 | 143 |
+| `dialogue-engine` | Python / FastAPI | 8001 (internal) | 867 |
+| `persona-engine` | Python / FastAPI | 8002 | 136 |
+| `expression-service` | Python / DeepFace | 8003 | 94 |
+| `session-service` | Node / Express | 8004 | 891 |
+| `aac-icon-service` | Node / Express | 8005 | 86 |
+| `dialogue-queue` | Node / BullMQ | 8006 | 197 |
+| `redis` | Redis 7 | 6379 | |
+| `minio` | MinIO | 9000/9001 | |
+| `k8s/` | manifests, never deployed | | 905 |
 
-| | Learning Mode | Survival Mode |
-|---|---|---|
-| Hint bar | Visible (separate Claude call) | Hidden |
-| Hearts | N/A | 5 hearts — deducted on 30s timeout or off-context response |
-| NPC behaviour | Structured, supportive | Unpredictable, naturalistic |
-
-### Dialogue Engine
-
-Every Claude API call is structured as:
-
-```
-[scenario context] + [persona modifier] + [conversation history] + [translated icon input]
-```
-
-Icon translation happens in `aac-icon-service` before the prompt is built — the LLM never receives raw icon IDs.
-
-### Emotion Detection (Two-Layer)
-
-| Layer | Where | What |
-|---|---|---|
-| DeepFace | Server-side (`expression-service`) | Classifies 7 emotions from JPEG frames POSTed every 500ms |
-| MediaPipe Face Mesh | Client-side (browser JS) | Renders 468-point dot overlay on canvas — visual only, no data |
-
-Emotion events are timestamped in Supabase. Therapist replay drives emoji overlays from stored timestamps — no ML runs during playback.
-
-### Communication Competence Scoring
-
-Post-session: full transcript + emotion summary → Claude API → JSON scores across 5 dimensions:
-
-- Operational, Linguistic, Social, Strategic, Confidence
-
-Rendered as a Recharts radar chart in the therapist dashboard.
-
-### Session Recording
-
-`MediaRecorder` captures the learner's webcam as WebM. On session end, the blob uploads to MinIO. Therapist view replays the video with emotion overlay synced to stored timestamps.
+Supabase hosts v1's Postgres and auth. Tables: `sessions`, `session_events`, `emotion_events`,
+`learner_profiles`, `scenarios`.
 
 ---
 
-## Figma Design Reference
+## Corrections to the previous version of this file
 
-Design file: [SABI Figma](https://www.figma.com/design/40cH7cHFTR92K0LK9zoHoI/SABI?node-id=25-305)
+The README that shipped with v1 advertised several things that were not true. They are listed here
+rather than quietly deleted, because the gap between what a README claims and what a repository
+does is itself worth seeing.
 
-Key screens:
-- **Learner scenario view:** background photo + NPC photo + speech bubble + AAC grid + hint bar (Learning) or hearts bar (Survival)
-- **Therapist session report:** radar chart (5 competence dimensions) + emotion timeline + session transcript
-- **Therapist view recording:** video player + emotion emoji/face mesh overlay synced to playback
-
-NPC CSS z-index stack: speech bubble (4) → NPC photo (3) → background photo (2) → black fallback (1)
-
----
-
-## Development Guide
-
-### Frontend (outside Docker)
-
-```bash
-cd frontend
-npm install
-npm run dev      # http://localhost:3000
-```
-
-### Python services (outside Docker)
-
-```bash
-cd dialogue-engine
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
-```
-
-### Scale dialogue workers
-
-```bash
-docker-compose up --scale dialogue-queue-worker=3
-```
-
-Total concurrent Claude calls = replicas × `WORKER_CONCURRENCY` (default: 2). Keep within your Anthropic tier limit.
-
-### MinIO console
-
-```
-http://localhost:9001
-Login: minioadmin / minioadmin
-```
-
----
-
-## Phased Build Plan
-
-| Phase | Days | Scope |
-|---|---|---|
-| **Phase 1** | 1–3 | Next.js routing, icon pre-fetch, static scenario stage, AAC board UI, Claude API (hardcoded prompt), Supabase tables + auth, Docker Compose skeleton |
-| **Phase 2** | 4–7 | Icon-to-text translation, ElevenLabs TTS, Learning/Survival modes, Sabi hint bar, Persona Engine, session logging |
-| **Phase 3** | 8–11 | Expression Service (DeepFace), MediaPipe overlay, session video recording, MinIO upload, Therapist Dashboard, emotion timeline |
-| **Phase 4** | 12–14 | View Recording with emotion playback, scenario builder, competence scoring, therapist PiP webcam, E2E demo testing |
-
-Post-MVP features (native apps, offline mode, Kubernetes, Kong gateway, pgvector icon search, ML persona classifier) are explicitly deferred.
-
----
-
-## Database Schema (Supabase)
-
-| Table | Description |
+| It said | Actually |
 |---|---|
-| `User` | Auth users with role (`learner` / `therapist`) |
-| `LearnerProfile` | Persona classification, assigned therapist |
-| `Scenario` | Available scenarios with stage definitions |
-| `Session` | Session records (start, end, scenario, mode, persona) |
-| `SessionEvent` | Timestamped icon selections, NPC responses, emotion readings |
+| MediaPipe Face Mesh renders a 468-point overlay | `WebcamOverlay.tsx` existed and was imported by nothing. Dead code, advertised as a headline feature (finding `2.3`) |
+| `dialogue-queue-api` "returns `request_id` for polling" | There is no `request_id` field and nothing polls. The queue holds an SSE connection open and streams; the frontend never references it |
+| Emotion frames POSTed "every 500ms" | 1000ms, in both versions |
+| The persona engine classifies into "three types" named Guided Learner / Social Practice Learner / Independent Communicator | Five, named `shy_chick`, `steady_turtle`, `curious_monkey`, `zippy_sotong`, `garang_crab`. The three-name vocabulary belongs to an earlier design that was superseded without the README being updated |
+| Kubernetes and Kong are "explicitly deferred" post-MVP | Both are in the repository. `k8s/` is 905 lines |
+| Icon categories: Core Words, Social, Emotions, Actions, People, Descriptors | Three: 58 core words, 38 social, 32 emotions, 128 in total, plus a per-scenario set |
+| Tables `User`, `LearnerProfile`, `Scenario`, `Session`, `SessionEvent` | `sessions`, `session_events`, `emotion_events`, `learner_profiles`, `scenarios` |
 
-Schema is managed via the Supabase dashboard or the `mcp__supabase__*` MCP tools.
+Two more, from the audit and the rebuild:
+
+- **The audit itself said 136 icons.** It is 128. Corrected in the dossier.
+- **v2 accumulated its own unmeasured claim.** A comment said the landmarker costs "~8ms per frame,
+  under 1% of a core". Measured on the deployed build it is ~29ms, so nearer 3%. Corrected in place.
+
+---
+
+## Layout
+
+```
+sabi/
+  v2/                  the app that runs. Vercel root directory points here
+    src/app/api/       seven route handlers
+    src/lib/           pure modules; everything testable lives here
+    db/migrations/     NNNN_snake_name.sql, applied in sort order
+    evals/             scoring eval set, workflow_dispatch only
+    bench/             latency and cost harness, no CI trigger
+  frontend/            v1 client            \
+  dialogue-engine/                           |
+  session-service/                           |  frozen, still runnable,
+  dialogue-queue/                            |  gated by CI
+  expression-service/                        |
+  persona-engine/                            |
+  aac-icon-service/                          |
+  kong/  k8s/  tests/locust/                 |
+  docker-compose.yml  dev.sh                /
+  ARCHITECTURE.md      how v2 works
+  DECISIONS.md         what changed, why, and what it cost
+  MEASUREMENTS.md      real numbers and how they were taken
+  BACKLOG.md           what is deferred, and why
+```
+
+---
+
+## Credits
+
+AAC pictograms are from [ARASAAC](https://arasaac.org/), used under CC BY-NC-SA. They are fetched
+at build time and committed, so the board works offline.
