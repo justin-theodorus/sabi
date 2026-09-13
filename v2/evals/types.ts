@@ -38,6 +38,18 @@ export interface Fixture {
      * what catches a flat 50-across-the-board response, which tier ordering alone would not.
      */
     readonly dimensionsAbove?: readonly (readonly [ScoreDimension, ScoreDimension])[]
+    /**
+     * Dimensions that must come back NULL because this session gave no opportunity to observe
+     * them. Only `strategic` can be null, and only when nothing in the transcript ever broke.
+     */
+    readonly notObserved?: readonly ScoreDimension[]
+    /**
+     * Dimensions that must come back as a NUMBER. The counterpart to the above and the half that
+     * actually protects the distinction: a fixture where the NPC signals confusion and the learner
+     * never adapts must score low, not null. Without this, "not observed" would become a way for
+     * the scorer to decline every hard judgement.
+     */
+    readonly observed?: readonly ScoreDimension[]
   }
 }
 
@@ -45,8 +57,8 @@ export interface FixtureRun {
   readonly fixtureId: string
   readonly tier: Tier
   readonly runs: readonly {
-    readonly scores: Record<ScoreDimension, number>
-    readonly overall: number
+    readonly scores: Record<ScoreDimension, number | null>
+    readonly overall: number | null
     readonly summary: string
   }[]
   readonly error?: string

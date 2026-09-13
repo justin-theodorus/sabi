@@ -7,6 +7,7 @@
 // not on exact values. An eval that pins `operational === 72` breaks on every model change and
 // tells you nothing about whether the scorer got worse.
 
+import { modelProvider, scoringModelId } from '@/lib/ai/model'
 import { SCORE_DIMENSIONS, type ScoreDimension } from '@/lib/scoring/schema'
 import type { Fixture, FixtureRun, Tier } from './types'
 
@@ -38,11 +39,27 @@ const stddev = (values: readonly number[]): number => {
   return Math.sqrt(mean(values.map((value) => (value - avg) ** 2)))
 }
 
-const dimensionMean = (result: FixtureRun, key: ScoreDimension): number =>
-  mean(result.runs.map((run) => run.scores[key]))
+const numbers = (values: readonly (number | null)[]): number[] =>
+  values.filter((value): value is number => value !== null)
+
+/**
+ * The mean of the runs that produced a number for this dimension. Null when every run declined it
+ * as not observed, which is a result rather than a zero — see the `strategic` field in
+ * lib/scoring/schema.ts.
+ */
+const dimensionMean = (result: FixtureRun, key: ScoreDimension): number | null => {
+  const observed = numbers(result.runs.map((run) => run.scores[key]))
+  return observed.length === 0 ? null : mean(observed)
+}
 
 const tierMean = (results: readonly FixtureRun[], tier: Tier): number =>
-  mean(results.filter((r) => r.tier === tier && r.runs.length > 0).flatMap((r) => r.runs.map((run) => run.overall)))
+  mean(
+    numbers(
+      results
+        .filter((r) => r.tier === tier && r.runs.length > 0)
+        .flatMap((r) => r.runs.map((run) => run.overall)),
+    ),
+  )
 
 export function assertEvals(
   fixtures: readonly Fixture[],
@@ -66,9 +83,10 @@ export function assertEvals(
   // 2. Range. Schema-enforced, asserted anyway: v1 did float() with no bounds check at all.
   const outOfRange = results.flatMap((result) =>
     result.runs.flatMap((run) =>
-      SCORE_DIMENSIONS.filter((key) => run.scores[key] < 0 || run.scores[key] > 100).map(
-        (key) => `${result.fixtureId}.${key}=${run.scores[key]}`,
-      ),
+      SCORE_DIMENSIONS.filter((key) => {
+        const value = run.scores[key]
+        return value !== null && (value < 0 || value > 100)
+      }).map((key) => `${result.fixtureId}.${key}=${run.scores[key]}`),
     ),
   )
   checks.push({
@@ -105,10 +123,48 @@ export function assertEvals(
     for (const [higher, lower] of pairs) {
       const a = dimensionMean(result, higher)
       const b = dimensionMean(result, lower)
+      // A null on either side means the ordering could not be evaluated at all. That is a failure
+      // rather than a skip: the fixture asserted a comparison and did not get one.
       checks.push({
         name: `${fixture.id}: ${higher} above ${lower}`,
-        passed: a > b,
-        detail: `${higher} ${a.toFixed(1)} vs ${lower} ${b.toFixed(1)}`,
+        passed: a !== null && b !== null && a > b,
+        detail:
+          a === null || b === null
+            ? `${higher} ${a ?? 'not observed'} vs ${lower} ${b ?? 'not observed'}`
+            : `${higher} ${a.toFixed(1)} vs ${lower} ${b.toFixed(1)}`,
+      })
+    }
+  }
+
+  // 4b. Not observed vs not demonstrated. The whole point of making `strategic` nullable: a
+  //     session where nothing ever broke must decline the dimension, and a session where the NPC
+  //     signalled confusion and the learner never adapted must still score it low. Asserting only
+  //     the first half would let the scorer answer "not observed" to everything difficult.
+  for (const fixture of fixtures) {
+    const result = byId.get(fixture.id)
+    if (!result || result.runs.length === 0) continue
+
+    for (const key of fixture.expect.notObserved ?? []) {
+      const scored = result.runs.filter((run) => run.scores[key] !== null)
+      checks.push({
+        name: `${fixture.id}: ${key} is not observed`,
+        passed: scored.length === 0,
+        detail:
+          scored.length === 0
+            ? `all ${result.runs.length} runs declined it, as they should — nothing broke`
+            : `${scored.length}/${result.runs.length} runs scored it: ${scored.map((r) => r.scores[key]).join(', ')}`,
+      })
+    }
+
+    for (const key of fixture.expect.observed ?? []) {
+      const declined = result.runs.filter((run) => run.scores[key] === null)
+      checks.push({
+        name: `${fixture.id}: ${key} is observed`,
+        passed: declined.length === 0,
+        detail:
+          declined.length === 0
+            ? `scored in all ${result.runs.length} runs (mean ${dimensionMean(result, key)?.toFixed(1)})`
+            : `${declined.length}/${result.runs.length} runs declined a dimension the transcript gives evidence for`,
       })
     }
   }
@@ -116,7 +172,7 @@ export function assertEvals(
   // 5. Stability. Reported for every fixture; failed only past the band.
   for (const result of results) {
     if (result.runs.length < 2) continue
-    const sd = stddev(result.runs.map((run) => run.overall))
+    const sd = stddev(numbers(result.runs.map((run) => run.overall)))
     checks.push({
       name: `${result.fixtureId}: stable across runs`,
       passed: sd <= MAX_STDDEV,
@@ -126,7 +182,9 @@ export function assertEvals(
 
   // 6. Not degenerate. If every dimension of every fixture lands on the same number, the scorer is
   //    not discriminating and every check above could still pass by luck.
-  const allScores = results.flatMap((r) => r.runs.flatMap((run) => SCORE_DIMENSIONS.map((k) => run.scores[k])))
+  const allScores = numbers(
+    results.flatMap((r) => r.runs.flatMap((run) => SCORE_DIMENSIONS.map((k) => run.scores[k]))),
+  )
   const spread = allScores.length === 0 ? 0 : Math.max(...allScores) - Math.min(...allScores)
   checks.push({
     name: 'scorer uses the range',
@@ -136,7 +194,9 @@ export function assertEvals(
 
   return {
     startedAt: new Date().toISOString(),
-    model: process.env.SABI_MODEL_PROVIDER === 'anthropic' ? 'anthropic direct' : 'gateway',
+    // The model ID itself, not just the provider. Comparing two runs is the entire point of
+    // finding 2.22 and two files that both say "gateway" cannot be compared.
+    model: `${scoringModelId()} via ${modelProvider()}`,
     passed: checks.every((check) => check.passed),
     checks,
   }

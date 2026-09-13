@@ -21,11 +21,13 @@ const fixture = (id: string, tier: Tier, pairs: Fixture['expect']['dimensionsAbo
 })
 
 /** A run where every dimension is `base`, unless overridden. */
-const run = (base: number, overrides: Partial<Record<ScoreDimension, number>> = {}) => {
+const run = (base: number, overrides: Partial<Record<ScoreDimension, number | null>> = {}) => {
   const scores = Object.fromEntries(
-    SCORE_DIMENSIONS.map((key) => [key, overrides[key] ?? base]),
-  ) as Record<ScoreDimension, number>
-  const overall = SCORE_DIMENSIONS.reduce((t, k) => t + scores[k], 0) / SCORE_DIMENSIONS.length
+    SCORE_DIMENSIONS.map((key) => [key, key in overrides ? overrides[key] : base]),
+  ) as Record<ScoreDimension, number | null>
+  const observed = SCORE_DIMENSIONS.map((k) => scores[k]).filter((v): v is number => v !== null)
+  const overall =
+    observed.length === 0 ? null : observed.reduce((t, v) => t + v, 0) / observed.length
   return { scores, overall, summary: 's' }
 }
 
@@ -139,4 +141,64 @@ test('an out-of-range score fails even if the schema somehow let it through', ()
 test('a single-run fixture is not asserted for stability', () => {
   const report = assertEvals([fixture('one', 'strong')], [result('one', 'strong', [run(70)])])
   assert.equal(check(report, 'one: stable across runs'), undefined)
+})
+
+// ── Not observed vs not demonstrated ─────────────────────────────────────────
+
+const observedFixture = (
+  id: string,
+  tier: Tier,
+  expect: Fixture['expect'],
+): Fixture => ({ ...fixture(id, tier), expect })
+
+test('a dimension every run declined satisfies notObserved', () => {
+  const report = assertEvals(
+    [observedFixture('s1', 'strong', { notObserved: ['strategic'] })],
+    [result('s1', 'strong', [run(80, { strategic: null }), run(78, { strategic: null })])],
+  )
+  assert.equal(check(report, 'strategic is not observed')?.passed, true)
+})
+
+test('notObserved fails when any run scored the dimension anyway', () => {
+  // The half that stops the change being unfalsifiable: two runs out of three declining is not
+  // the scorer applying the rule, it is the scorer being inconsistent.
+  const report = assertEvals(
+    [observedFixture('s1', 'strong', { notObserved: ['strategic'] })],
+    [result('s1', 'strong', [run(80, { strategic: null }), run(80, { strategic: 12 })])],
+  )
+  const found = check(report, 'strategic is not observed')
+  assert.equal(found?.passed, false)
+  assert.match(found?.detail ?? '', /1\/2 runs scored it/)
+})
+
+test('observed fails when the scorer declines a dimension the transcript gives evidence for', () => {
+  // mixed-01's shape: the NPC signals confusion three times and the learner repeats itself. That
+  // is a low score, not an absence of opportunity, and "not observed" must not become a way out.
+  const report = assertEvals(
+    [observedFixture('m1', 'mixed', { observed: ['strategic'] })],
+    [result('m1', 'mixed', [run(45, { strategic: null }), run(45, { strategic: 15 })])],
+  )
+  assert.equal(check(report, 'strategic is observed')?.passed, false)
+})
+
+test('a dimensionsAbove pair that cannot be evaluated fails rather than silently passing', () => {
+  const report = assertEvals(
+    [fixture('s1', 'strong', [['social', 'strategic']])],
+    [result('s1', 'strong', [run(80, { strategic: null })])],
+  )
+  const found = check(report, 'social above strategic')
+  assert.equal(found?.passed, false)
+  assert.match(found?.detail ?? '', /not observed/)
+})
+
+test('a not-observed dimension is left out of the range and spread checks', () => {
+  const report = assertEvals(
+    [fixture('s1', 'strong'), fixture('w1', 'weak')],
+    [
+      result('s1', 'strong', [run(90, { strategic: null })]),
+      result('w1', 'weak', [run(10, { strategic: null })]),
+    ],
+  )
+  assert.equal(check(report, 'all scores within')?.passed, true)
+  assert.equal(check(report, 'uses the range')?.detail, 'observed spread 80 across all dimensions (need 20)')
 })
