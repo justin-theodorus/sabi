@@ -9,7 +9,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 |---|---|---|
 | `POST /api/hint` | later | The Learning-mode Sabi hint bar: a second model call 4s after each NPC reply (`SabiHintBar.tsx:25-32`). Not in Phase 1's task list; adds a third route and its own timer to the reducer. |
 | TTS | later | ElevenLabs sentence-chunked audio. The design is sound once `2.16` is fixed (v1 gathers every sentence's audio before emitting any, so the listener hears nothing until the slowest call returns). Not load-bearing for either interview angle. |
-| Client-side emotion capture | 3 | The whole point of Phase 3. `PromptInput.emotion` and its prompt branch are already ported and tested, so wiring it is a matter of populating one field. |
+| Client-side emotion capture | DONE (3) | MediaPipe Face Landmarker blendshapes, in the browser. `PromptInput.emotion` is populated by `/api/dialogue`. |
 | Session report at `/report/[sessionId]` | 4 | Transcript, emotion timeline, competence radar. The event log is already the transcript, so the data is there. |
 | `/score-session` with tool-use | DONE (2) | Built in Phase 2 as `POST /api/sessions/[id]/score`. Phase 4 renders it. |
 | Other three scenarios | — | Needs commissioned art (`2.11`). Single-scenario done properly is the stronger showcase. |
@@ -94,8 +94,102 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   is brittle against an SDK upgrade. The tests pin the behaviour, so an upgrade that changes it
   fails loudly rather than silently.
 
+- **`2.3` — RESOLVED in Phase 3.** The dead MediaPipe overlay is replaced by a live client-side
+  pipeline. `@mediapipe/tasks-vision` Face Landmarker runs at 1fps on the CPU delegate, 52 ARKit
+  blendshapes reduce to ten named signals (`v2/src/lib/expression/signals.ts`), and the per-turn
+  window is summarised arithmetically into the `OBSERVABLE EXPRESSION` line of the system prompt.
+  Verified end to end on the production build: the composed prompt carried
+  `appears relaxed. (smile 0.93 -> 0.93, brow tension 0.38 -> 0.4, eyes narrowed 0.39 -> 0.39,
+  over 11s across 12 samples)` and the model labelled the learner `content`. Both the submit path
+  and the NPC-bump path carry a window.
+
 - **`is_repair` has no v2 equivalent.** `2.9` fixed the emotion the flag was derived from, but
   nothing writes the flag itself. Phase 4 decides whether the therapist log needs it.
 
-- **Three emotion taxonomies are still live.** Six NPC sprite labels, twelve in v1's
-  `/summarize-emotion`, seven from DeepFace. Phase 3 has to reconcile the two learner-side sets.
+- **Emotion taxonomies — RESOLVED in Phase 3, and there were four, not three.** Two remain and
+  they describe different subjects: six NPC sprite labels (the character's feeling) and the twelve
+  from v1's `/summarize-emotion` (the learner's, now a zod enum the model must satisfy — v1
+  interpolated whatever string came back straight into the next system prompt). DeepFace's seven
+  are retired with `expression-service/`; nothing in v2 emits them. The eight
+  `EXPRESSION_DESCRIPTORS` are deliberately not a third set: they name muscle activity, not
+  feeling, which is why they can be computed arithmetically without repeating `2.9`.
+  The fourth set the BACKLOG missed is the AAC board's own `emotions` category (32 labels,
+  `AACBoard.tsx:129-160`), which is learner *vocabulary* rather than learner *state*. Left alone,
+  noted for Phase 6 along with the `angry`/`mad` and `surprise`/`surprised` collisions across sets.
+
+## Surfaced by Phase 3, deferred on purpose
+
+- **A failed session start cannot be retried. Phase 1 defect, found by review in Phase 3, NOT
+  fixed — it is outside this phase.** `startedEffects` in `use-turn.ts:25` is a `Set` that is
+  never pruned, and `effectId` (`reducer.ts:55-56`) is
+  `${kind}:${turnIndex}:${transcript.length}:${pending.length}`. `SESSION_FAILED`
+  (`reducer.ts:115-116`) returns to `lobby` without touching any of those three counters, and
+  `EFFECT_SETTLED` drains `pending` back to empty, so the state is numerically identical to the
+  initial state. The next Start click therefore regenerates the id `createSession:0:0:0`, the
+  drain at `use-turn.ts:137` filters it out as already-started, no fetch happens, and the phase
+  sits at `submitting` forever with `busy` true and no error shown. Recovery is a page reload.
+
+  Confirmed by running the reducer through `START_REQUESTED` -> `SESSION_FAILED` ->
+  `EFFECT_SETTLED` -> `START_REQUESTED`: both attempts produce `createSession:0:0:0`. Deterministic,
+  not a race. It bites after any network blip on the very first request of a session, which is
+  exactly when a reader of the deployed demo would meet it. Worth fixing early in Phase 4.
+
+
+- **The emotion loop costs no measurable TTFT.** Two interleaved passes of 12 turn-pairs against
+  the production build, same session shape, alternating which arm went first: median 2154ms and
+  2115ms with an expression window, 2191ms and 2125ms without. The difference is noise and it is
+  not in the direction of a regression. Absolute numbers are higher than the 1650-1949ms in the
+  Phase 2 note because these were taken against a local `next start` on the direct Anthropic key
+  rather than the deployed build; only the within-run comparison means anything. Phase 5 measures
+  properly.
+
+  The reason there is nothing to pay for: the summary is not a second model call. v1 awaited
+  `POST /summarize-emotion` before `streamDialogue` could begin, on every turn
+  (`session/page.tsx:554-558`). v2 composes the observation arithmetically server-side and asks
+  for the label as one extra enum field in the dialogue call that was already happening — the same
+  move Phase 2 made for `2.9`.
+
+- **Per-frame emotion samples are not persisted, and there is no `0003` migration.** v1 wrote one
+  `emotion_events` row per second and the only consumer ever built counted them into
+  `"neutral 62%, happy 21%"` (`therapist/sessions/[sessionId]/page.tsx:88-96`). v2 stores the
+  per-turn aggregate in the existing `npc_response` jsonb payload instead, which is what both
+  consumers (the report and the scoring prompt) actually want. If Phase 4's emotion timeline turns
+  out to need 1fps granularity, that is a migration plus a write path, decided with the report
+  design in hand rather than speculatively.
+
+- **`learnerEmotion` is `nullish`, not `nullable`, and that is a deliberate asymmetry.** A model
+  that omits the label produces a turn with no emotion record; a model that omits it under a
+  strict schema would produce no turn at all. The reply is what the learner is waiting for and the
+  label is a data point, so the schema declines to trade the first for the second. `emotion` (the
+  NPC's own) stays required, because the sprite has to render something.
+
+- **`video.play()` never settles when a camera opens but delivers no frames.** Found while driving
+  a session against a virtual camera device: the track went `live` with correct 640x480 settings
+  and `readyState` stayed at `HAVE_NOTHING` forever, leaving the badge on "Starting camera" with
+  no way out. Both `play()` and the landmarker load are now bounded by `START_TIMEOUT_MS`, and a
+  timeout closes the stream before it gives up rather than leaving the browser's recording
+  indicator lit for a feature that has already failed.
+
+- **iPad is still inferred, not measured.** The spike ran on an M-series Mac. There is no WebGL or
+  WebGPU dependency (the CPU delegate measured *faster* than GPU, 8.4ms vs 10.4ms p50, because the
+  model is small enough that texture upload dominates) and no cross-origin isolation is required,
+  which was measured rather than assumed. But per-frame cost on a tablet has not been observed.
+  Open the production alias on a real iPad before Phase 5 claims anything about it. The documented
+  fallback if it fails is a server function for inference.
+
+- **The MediaPipe wasm runtime is copied into `public/` at build time and gitignored;
+  the 3.7MB `face_landmarker.task` is committed.** The model comes from a Google Cloud Storage URL
+  rather than from the package, and a build that silently depends on a remote fetch is the thing
+  this phase argues against. Both SIMD and nosimd builds are copied because the resolver picks
+  between them at runtime and a missing one is a 404 mid-session, not a build error.
+
+- **The ONNX/transformers.js path is not taken, with numbers attached.** The candidate was
+  `Xenova/facial_emotions_image_detection` (ViT-base, the DeepFace-equivalent class). It measured
+  p50 676ms/frame on q8/wasm
+  and 35.8ms on q4f16/WebGPU, against 8.4ms for MediaPipe; 50-87MB of model against 3.76MB; and it
+  brings no face detector, which matters more than it sounds. On the same portrait the classifier
+  scored `happy 0.288` on the uncropped 640x480 frame and `happy 0.858` once the face was cropped
+  to 224x224. v1 leaned on DeepFace's internal opencv detector for that crop and passed
+  `enforce_detection=False` (`expression-service/main.py:65-70`), so a failed detection silently
+  classified the whole room and every error path returned neutral at 100% (`:91-93`). Worth saying
+  out loud: the "DeepFace's 7 classes" bar is lower than it sounds.
