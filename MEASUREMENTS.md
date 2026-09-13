@@ -7,8 +7,8 @@ committed load-test output anywhere in the repo, no CSV, no screenshot, no logge
 This file is the correction. Everything below was taken against the deployed app on a stated
 commit, with the method and the sample size next to each figure.
 
-v1 is frozen and gated in CI, so its six comments are **superseded here rather than edited** —
-see the last section. v2's own unmeasured comments were corrected in place, and one of them turned
+v1 is frozen and gated in CI, so its six comments are **superseded here rather than edited**.
+See the last section. v2's own unmeasured comments were corrected in place, and one of them turned
 out to be wrong by 3.5x.
 
 ---
@@ -20,14 +20,14 @@ figure taken anywhere else, which is the lesson of section 6.
 
 | | |
 |---|---|
-| Target | `https://sabi-lyart.vercel.app` — the production alias, public, no SSO |
+| Target | `https://sabi-lyart.vercel.app`, the production alias, public, no SSO |
 | Commit | `21e09d9` on `v2-rebuild` |
 | Date | 2026-09-13 |
 | Runtime | Next 16.3.5, React 19.2.8, `ai` 7.0.99, Node 22 |
 | Provider | **Vercel AI Gateway**, authenticated by OIDC. Production has no `SABI_MODEL_PROVIDER`, no `ANTHROPIC_API_KEY` and no `AI_GATEWAY_API_KEY`, so `lib/ai/model.ts` takes its default path |
 | Model | `anthropic/claude-haiku-4.5`, resolved by the gateway to provider `anthropic` |
 | Function region | `iad1` (Washington DC) |
-| Edge | `sin1` (Singapore) — from `x-vercel-id: sin1::iad1::…` |
+| Edge | `sin1` (Singapore), from `x-vercel-id: sin1::iad1::…` |
 | Client | Node 22 on darwin/arm64, residential connection in Singapore |
 | Concurrency | 1. Sessions are the unit of concurrency and turns within a session are serial |
 
@@ -70,7 +70,7 @@ Excluding the first call of the run, which was the only plausibly cold invocatio
 
 Cold start is **not inferred** from a header, because it cannot be. The first invocation is simply
 excluded and reported both ways; the deployment had been idle for over five minutes beforehand.
-The p95 difference between the two tables — 2263ms against 1649ms — is that single call.
+The p95 difference between the two tables, 2263ms against 1649ms, is that single call.
 
 Note that response headers arrive at 1311ms and the first token at 1317ms. **The platform does not
 flush headers early on a streamed response**, so there is no "the page is responding" signal ahead
@@ -82,8 +82,8 @@ The same 36 calls, recorded server-side into `model_calls` by the instrumentatio
 
 | | p50 | p95 |
 |---|---|---|
-| time to first token, **model** (`performance.timeToFirstOutputMs`) | 696ms | — |
-| time to first token, **visible** (our first `text-delta`) | 1002ms | — |
+| time to first token, **model** (`performance.timeToFirstOutputMs`) | 696ms | n/a |
+| time to first token, **visible** (our first `text-delta`) | 1002ms | n/a |
 | total call | 1171ms | 1504ms |
 
 Tokens: mean 1152 in, 43 out.
@@ -147,13 +147,13 @@ So roughly **a tenth of a cent per turn and one cent per session**, at Haiku 4.5
 six-turn session. A survival session costs more: it adds a `/judge` call per turn, which is why
 that call site is instrumented too even though no survival session appears in this run.
 
-`unreadable: 0` across all 42 calls — the gateway's cost report parsed cleanly every time. Costs
+`unreadable: 0` across all 42 calls: the gateway's cost report parsed cleanly every time. Costs
 are stored as `numeric(12,8)` and summed in Postgres, never as floats in JavaScript.
 
 **Input dominates output roughly 27 to 1.** The system prompt, the scenario, and up to twelve
 turns of history are re-sent on every turn; the reply is capped at 256 tokens and averages 43.
-Nothing here is currently cached — `cache_read_tokens` and `cache_write_tokens` were zero on every
-call — so prompt caching is the obvious lever, and it is untouched.
+Nothing here is currently cached. `cache_read_tokens` and `cache_write_tokens` were zero on every
+call, so prompt caching is the obvious lever, and it is untouched.
 
 ---
 
@@ -180,8 +180,8 @@ variable.
 
 **This contradicts the number in the code.** `lib/turn/constants.ts` said "at ~8ms of inference per
 frame this is under 1% of a core", inherited from the Phase 3 spike. Measured here it is ~29ms, so
-at 1 Hz it is closer to **2.9% of a core** than to 1%. Both conclusions — that the sample rate is
-affordable, and that the emotion loop costs no measurable TTFT — survive. The stated figure does
+at 1 Hz it is closer to **2.9% of a core** than to 1%. Both conclusions survive: that the sample
+rate is affordable, and that the emotion loop costs no measurable TTFT. The stated figure does
 not, and the comment has been corrected.
 
 Two honest caveats. The video source is a canvas stream rather than a hardware webcam, and a real
@@ -201,7 +201,7 @@ compressing before this phase measured anything. Measured:
 | the same sprite through `next/image` at `w=640&q=75` | 103,196 (webp) |
 
 **A 96% reduction, already happening.** They render through `next/image`, so compressing the source
-assets would not save a learner a single byte — it would only shrink the deploy upload and the
+assets would not save a learner a single byte. It would only shrink the deploy upload and the
 build. v1's copies are byte-identical and frozen, so the repository does not shrink either way.
 
 **Decision: not compressed.** The note in `BACKLOG.md` assumed a cost that delivery optimisation
@@ -238,7 +238,7 @@ refuses to print a p95 below 20 samples.
 
 ## 7. v1's six claims, superseded
 
-v1 is frozen — `k8s/`, `dialogue-queue/`, `session-service/`, `dev.sh` and `kong/` are all gated by
+v1 is frozen. `k8s/`, `dialogue-queue/`, `session-service/`, `dev.sh` and `kong/` are all gated by
 the `v1-frozen` job in `.github/workflows/v2.yml`, which fails if any of them changes. The rebuild
 plan's instruction to "delete or correct any surviving comment that asserts a number nobody
 measured" therefore cannot mean editing them. They are corrected here instead, which is also the
@@ -247,8 +247,8 @@ more useful artifact: the claim, and what the equivalent path actually does in v
 | v1 claim | where | status | what v2 measured |
 |---|---|---|---|
 | "Stress test shows: 1 pod saturates at ~15 concurrent sessions" | `k8s/expression-service.yaml:57` | **Never measured.** The number originates in the load test's own stated *goal* (`locustfile.py:19-20`) and was restated in a k8s comment as a finding. No cluster was ever stood up | Not applicable: expression inference runs in the browser in v2, so there is no pod to saturate. Per-frame cost is §4 |
-| "With HPA: 3 pods handle ~45 sessions at the same latency" | `k8s/expression-service.yaml:58` | **Never measured**, and doubly so — it is linear extrapolation from the line above, and nothing measured latency at all | As above |
-| "at 10s min/call → 36 req/min max" | `dialogue-queue/worker.js:12` | **Never measured**, and load-bearing: the 10s floor is the input to an argument for *deleting* a rate limiter (`:13`). Nothing establishes it | Measured: a dialogue call totals **1171ms at p50**, 1504ms at p95 — roughly an order of magnitude below the assumed floor. Had the queue shipped, its concurrency arithmetic would have been wrong in the unsafe direction |
+| "With HPA: 3 pods handle ~45 sessions at the same latency" | `k8s/expression-service.yaml:58` | **Never measured**, and doubly so: it is linear extrapolation from the line above, and nothing measured latency at all | As above |
+| "at 10s min/call → 36 req/min max" | `dialogue-queue/worker.js:12` | **Never measured**, and load-bearing: the 10s floor is the input to an argument for *deleting* a rate limiter (`:13`). Nothing establishes it | Measured: a dialogue call totals **1171ms at p50**, 1504ms at p95, roughly an order of magnitude below the assumed floor. Had the queue shipped, its concurrency arithmetic would have been wrong in the unsafe direction |
 | "DeepFace model warmup takes ~15s" | `k8s/expression-service.yaml:33` | **Never measured**, and contradicted three files away: `dev.sh:37` says ~30s for the same warmup | Not applicable. No model is downloaded server-side; the 3.76MB landmarker is committed and served same-origin |
 | "Buffer in Redis for sub-10ms writes" | `session-service/index.js:653` | **Never measured**, and structurally unfalsifiable as written: the path is two round trips and falls back to Supabase when Redis is down | Not applicable. v2 has no Redis and no per-frame write: the per-turn aggregate goes into the `npc_response` payload in the same transaction as the turn |
 | "Rate limit: 45 req/min (Redis sliding window across all worker pods)" | `locustfile.py:143,327` | **Describes a limiter that does not exist** anywhere in the codebase, so the test's own success criterion could never be evaluated | v2 has one limiter, not four disagreeing ones |
@@ -256,7 +256,7 @@ more useful artifact: the claim, and what the equivalent path actually does in v
 ### And one defect carried forward rather than fixed
 
 `tests/locust/locustfile.py:276` reads a `translation` key from `/translate`. Neither
-`aac-icon-service` nor v2's `/api/translate` has ever returned that key — both return `{ text }` —
+`aac-icon-service` nor v2's `/api/translate` has ever returned that key; both return `{ text }`,
 so the expression silently fell back to `" ".join(icons)` on every run ever made. The translate leg
 was timed and its output discarded, and nothing said so.
 
@@ -273,7 +273,7 @@ Listed because an unmeasured thing named is worth more than an unmeasured thing 
 
 - **Tablets.** Per-frame inference has never run on an iPad or any tablet. The mechanism in §4 is
   device-agnostic, so opening the production alias on one and playing a session is now sufficient
-  to close this — the numbers land in the database by themselves.
+  to close this: the numbers land in the database by themselves.
 - **A client near the function.** Every figure in §2 carries ~300ms of Pacific. A run from a
   US-East host would separate the product's latency from this laptop's geography.
 - **Load.** Everything here is `--concurrency=1`. The harness supports higher concurrency and a

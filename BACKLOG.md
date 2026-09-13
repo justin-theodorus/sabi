@@ -12,26 +12,26 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 | Client-side emotion capture | DONE (3) | MediaPipe Face Landmarker blendshapes, in the browser. `PromptInput.emotion` is populated by `/api/dialogue`. |
 | Session report at `/report/[sessionId]` | DONE (4) | Public, read-only, no cookie. Transcript, per-turn emotion timeline, competence radar. |
 | `/score-session` with tool-use | DONE (2) | Built in Phase 2 as `POST /api/sessions/[id]/score`. Phase 4 renders it. |
-| Other three scenarios | — | Needs commissioned art (`2.11`). Single-scenario done properly is the stronger showcase. |
+| Other three scenarios | none | Needs commissioned art (`2.11`). Single-scenario done properly is the stronger showcase. |
 | Video recording to Blob | 5 | Optional. Costs storage and adds a failure mode. |
 
 ## Known defects carried forward on purpose
 
-- **`2.9` — RESOLVED in Phase 2.** The keyword classifier is deleted. The NPC's emotion now comes
+- **`2.9`: RESOLVED in Phase 2.** The keyword classifier is deleted. The NPC's emotion now comes
   from the dialogue call already being made, as a schema-enforced enum declared first in the
   response object (`v2/src/lib/dialogue/npc-reply.ts`), so it survives a reply truncated by the
   256-token cap. Measured over 40 real turns on the production build: 0 `confused`-degenerate
-  runs, 0/40 marker misses, and every reply still ends in a question mark — the exact input that
+  runs, 0/40 marker misses, and every reply still ends in a question mark, the exact input that
   used to force `confused`. The five tests that pinned the defect were rewritten to the corrected
   expectations in `v2/src/lib/dialogue/npc-emotion.test.ts`, same inputs, so the before/after
   stays legible.
 
-- **`S5` — RESOLVED in Phase 2.** Ten categories in `v2/src/lib/ai/errors.ts`, each with defined
+- **`S5`: RESOLVED in Phase 2.** Ten categories in `v2/src/lib/ai/errors.ts`, each with defined
   learner-facing copy in `v2/src/lib/turn/error-messages.ts`, and none of them costs a heart. An
   invalid key now reads as `provider_rejected` with the real cause in the server log, rather than
   "No output generated. Check the stream for errors."
 
-- **`S6` — prompt injection.** `custom_npc_prompt` was dropped from `PromptInput` entirely rather
+- **`S6`: prompt injection.** `custom_npc_prompt` was dropped from `PromptInput` entirely rather
   than sanitised, since v1 had no legitimate caller for it. `activeEvent` and `availableIcons`
   are now sourced from server-side scenario config rather than the request body, so no
   caller-supplied free text reaches the system prompt in Phase 1. Revisit if any field ever
@@ -39,13 +39,18 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 
 ## Corrections owed to the documentation (Phase 6)
 
-- **The icon count is 128, not 136.** `AACBoard.tsx` has 58 `core_words`, 38 `social`, and 32
-  `emotions`. Both the README and `sabi-evidence.md` say 136.
-- **`tests/locust/locustfile.py:277` reads a `translation` key that has never existed.**
-  `aac-icon-service` returns `{ text }` and so does `/api/translate`. Every load-test run
-  silently fell back to `" ".join(icons)`, so the translate leg was timed but its output
-  discarded. Fix the test, not the contract, when the load test is rewritten against v2 in
-  Phase 5.
+- **The icon count is 128, not 136. DONE in Phase 6.** `AACBoard.tsx` has 58 `core_words`, 38
+  `social` and 32 `emotions`, plus one `scenario` placeholder, so 129 rows in the table and 128
+  board icons. Corrected in `sabi-evidence.md` (marked as an erratum, with the cause: a grep that
+  also matched the category type-union declaration) and in the rebuild plan. This entry previously
+  claimed the README said 136 as well; it did not, and never stated a count at all.
+- **`tests/locust/locustfile.py:276` reads a `translation` key that has never existed. CARRIED
+  FORWARD in Phase 5, not fixed.** `aac-icon-service` returns `{ text }` and so does
+  `/api/translate`. Every load-test run silently fell back to `" ".join(icons)`, so the translate
+  leg was timed but its output discarded. It cannot be fixed in place: `tests/` is on the v1-frozen
+  path list, so editing it fails CI. The lesson is carried into `v2/bench/assert.ts` instead, which
+  has no defaults and no optional-chained fallbacks, so a shape it does not recognise stops the run
+  rather than quietly becoming a fiction. See `DECISIONS.md` ADR-008. (The line is 276, not 277.)
 - **AACBoard's scenario-icon ids do not match the labels the prompt is given.** The board emits
   `scenario-chicken-rice` (`AACBoard.tsx:221-226`) while the prompt receives the label
   `chicken rice`. Harmless today because the board reports whole icon objects and only labels are
@@ -53,12 +58,23 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 - **Scenario icon images are all requested from `/icons/core_words/{id}.png`** regardless of the
   real category or extension, which is why the board has a two-letter text fallback. All 17
   hawker icons happen to exist at that path, so it works for the one scenario that ships.
-- Other README overclaims listed in `sabi-evidence.md` section 6: MediaPipe overlay as shipped,
-  `request_id` polling, a 500ms capture interval (it is 1000ms), three personas (there are five).
+- **README overclaims: DONE in Phase 6.** The README is rewritten and carries its own errata table
+  naming each one rather than deleting it quietly: the MediaPipe overlay advertised as shipped while
+  imported by nothing (`2.3`); `request_id` polling, where neither the field nor any polling exists;
+  a 500ms capture interval that was 1000ms in both versions; three personas named
+  Guided Learner / Social Practice Learner / Independent Communicator, against five actually named
+  `shy_chick`, `steady_turtle`, `curious_monkey`, `zippy_sotong`, `garang_crab`; Kubernetes and Kong
+  described as deferred post-MVP while `k8s/` is 905 lines in the repository; six icon categories
+  against three; and five database table names that do not match the five tables the code uses.
+
+- **`ARCHITECTURE.md`, `DECISIONS.md` and the rewritten `README.md` exist. DONE in Phase 6.**
+  `DECISIONS.md` is nine ADRs, each with a "what was lost" section, because a decision with no
+  stated cost is usually a decision nobody examined. `sabi-evidence.md` gained a resolution map
+  (section 0.1) rather than being rewritten, so it stays the record of what the audit found.
 
 ## Operational
 
-- **AI Gateway — RESOLVED in Phase 5.** The 403 is gone. Production carries no
+- **AI Gateway: RESOLVED in Phase 5.** The 403 is gone. Production carries no
   `SABI_MODEL_PROVIDER`, no `ANTHROPIC_API_KEY` and no `AI_GATEWAY_API_KEY`, so it already took the
   default gateway path via OIDC; every figure in `MEASUREMENTS.md` came through it. On a streaming
   request the gateway returns `cost`, `generationId` and the input/output cost split inline in the
@@ -69,7 +85,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   so far because it is a project security setting. Confirmed in Phase 5: the alias returns 200 with
   no auth markers, a per-deployment URL 302s to the login wall. The bench therefore targets the
   alias, never a deployment URL.
-- **NPC sprites — MEASURED in Phase 5, and deliberately NOT compressed.** `next/image` delivers
+- **NPC sprites: MEASURED in Phase 5, and deliberately NOT compressed.** `next/image` delivers
   `happy.png` at 103,196 bytes of webp against a 2,574,362 byte source: a 96% reduction that is
   already happening. Compressing the sources would save the learner nothing and would shrink only
   the deploy upload; v1's copies are byte-identical and frozen, so the repo does not shrink either.
@@ -83,18 +99,18 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   first was measured and did NOT recover it (1925ms median, plus a marker miss), so the ordering
   stays as it is. Phase 5 measures this properly; treat the numbers here as indicative.
 
-- **The scoring rubric penalised absence of opportunity — RESOLVED in Phase 4.** `strategic` is
+- **The scoring rubric penalised absence of opportunity: RESOLVED in Phase 4.** `strategic` is
   now nullable and nothing else is: it is the only dimension that needs an *opportunity* (a
   breakdown) before it can be observed at all, while the other four are visible on every turn the
   learner takes. The rubric returns null if and only if nothing in the transcript ever gave the
-  learner something to repair, and it is pointed at the evidence already in the log — `NPC
+  learner something to repair, and it is pointed at the evidence already in the log, `NPC
   (confused)` is the NPC reporting that it did not understand.
 
   It was never just `strong-03`. Strategic was the only dimension where strong fixtures fell into
   the weak band, across the board. Re-running the suite on the corrected rubric moved far more than
   that one cell: tier separation improved (strong-mixed 12.8 -> 15.5), `strong-04` went 58 -> 65 and
   back inside its own label without anyone retiering the fixture, and strategic ROSE where a
-  breakdown genuinely had occurred (`strong-02` 48 -> 71, `mixed-03` 32 -> 78) — the conflation had
+  breakdown genuinely had occurred (`strong-02` 48 -> 71, `mixed-03` 32 -> 78), the conflation had
   been depressing the dimension everywhere, not only where there was no opportunity.
 
   The model was already producing the concept in prose and being forced to encode it as a near-zero:
@@ -102,7 +118,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   proceeded without misunderstandings"*. Unprompted, it now declines the dimension on exactly the
   three fixtures whose transcripts contain no `confused` turn (`strong-03`, `strong-04`, `mixed-02`);
   only one of the three is asserted, so the other two are unforced agreement. The eval asserts both
-  halves — `strong-03` must decline it and `mixed-01`/`weak-02` must still score it low — because
+  halves, `strong-03` must decline it and `mixed-01`/`weak-02` must still score it low, because
   asserting only the first half would let "not observed" become a way out of every hard judgement.
 
 - **Two eval fixtures are arguably mis-tiered, and they were left alone.** `strong-04` (articulate
@@ -117,7 +133,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   is brittle against an SDK upgrade. The tests pin the behaviour, so an upgrade that changes it
   fails loudly rather than silently.
 
-- **`2.3` — RESOLVED in Phase 3.** The dead MediaPipe overlay is replaced by a live client-side
+- **`2.3`: RESOLVED in Phase 3.** The dead MediaPipe overlay is replaced by a live client-side
   pipeline. `@mediapipe/tasks-vision` Face Landmarker runs at 1fps on the CPU delegate, 52 ARKit
   blendshapes reduce to ten named signals (`v2/src/lib/expression/signals.ts`), and the per-turn
   window is summarised arithmetically into the `OBSERVABLE EXPRESSION` line of the system prompt.
@@ -126,17 +142,17 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   over 11s across 12 samples)` and the model labelled the learner `content`. Both the submit path
   and the NPC-bump path carry a window.
 
-- **`is_repair` — DECIDED in Phase 4: not added, and the reason is the interesting part.** The
+- **`is_repair`: DECIDED in Phase 4: not added, and the reason is the interesting part.** The
   signal v1's flag tried to carry is already in the log, model-provided, once per turn: the NPC's
   own emotion, where `confused` is precisely "I did not understand you". A second per-turn boolean
   derived by any other means would repeat `2.9` on a therapist-facing field. The scoring rubric now
-  reads that existing signal instead — see the not-observed band below — and the report prints the
+  reads that existing signal instead (see the not-observed band below), and the report prints the
   NPC's emotion beside each of its lines, so a reader can see where the breakdowns were without
   anything having to assert that a repair occurred.
 
-- **Emotion taxonomies — RESOLVED in Phase 3, and there were four, not three.** Two remain and
+- **Emotion taxonomies: RESOLVED in Phase 3, and there were four, not three.** Two remain and
   they describe different subjects: six NPC sprite labels (the character's feeling) and the twelve
-  from v1's `/summarize-emotion` (the learner's, now a zod enum the model must satisfy — v1
+  from v1's `/summarize-emotion` (the learner's, now a zod enum the model must satisfy; v1
   interpolated whatever string came back straight into the next system prompt). DeepFace's seven
   are retired with `expression-service/`; nothing in v2 emits them. The eight
   `EXPRESSION_DESCRIPTORS` are deliberately not a third set: they name muscle activity, not
@@ -157,7 +173,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 
 ## Surfaced by Phase 3, deferred on purpose
 
-- **A failed session start cannot be retried — FIXED in Phase 4, first thing.** `TurnState` gained
+- **A failed session start cannot be retried: FIXED in Phase 4, first thing.** `TurnState` gained
   a monotonic `effectSeq`, incremented in `enqueue`, which is the single place any effect is
   created; the id is now `${kind}#${seq}`. Uniqueness became structural rather than incidental, the
   reducer stayed pure, and `use-turn.ts` needed no change at all, so the StrictMode guarantee
@@ -192,7 +208,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   The reason there is nothing to pay for: the summary is not a second model call. v1 awaited
   `POST /summarize-emotion` before `streamDialogue` could begin, on every turn
   (`session/page.tsx:554-558`). v2 composes the observation arithmetically server-side and asks
-  for the label as one extra enum field in the dialogue call that was already happening — the same
+  for the label as one extra enum field in the dialogue call that was already happening, the same
   move Phase 2 made for `2.9`.
 
 - **Per-frame emotion samples are not persisted, and there is no `0003` migration.** v1 wrote one
@@ -243,9 +259,9 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 
 ## Resolved by Phase 4
 
-- **`S11` — RESOLVED.** `isSessionComplete` is gone. The NPC reports its own farewell as a
-  schema-enforced boolean in the dialogue call that was already happening — the same move Phase 2
-  made for `2.9` and Phase 3 made for the learner's emotion, now for the third time — and
+- **`S11`: RESOLVED.** `isSessionComplete` is gone. The NPC reports its own farewell as a
+  schema-enforced boolean in the dialogue call that was already happening. It is the same move Phase 2
+  made for `2.9` and Phase 3 made for the learner's emotion, now for the third time, and
   `FAREWELL_MARKERS` is deleted rather than retired in place, so there is no second, disagreeing
   source of truth. `sessionCompletion(farewell, turnIndex)` returns the REASON, not a boolean, and
   applies only the two rules that are genuinely policy: a floor so a session cannot end before the
@@ -257,8 +273,8 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   and the row carries `end_reason: turn_cap`, with the summary screen and the report both saying
   the conversation ran out of room rather than claiming the order was completed.
 
-  Cost, measured the way Phase 3 measured the emotion loop — ten interleaved pairs, alternating
-  which arm ran first: median TTFT 1319ms with the field and 1591ms without. The delta is negative,
+  Cost, measured the way Phase 3 measured the emotion loop: ten interleaved pairs, alternating
+  which arm ran first. Median TTFT 1319ms with the field and 1591ms without. The delta is negative,
   which is noise rather than a speedup (one arm carried outliers at 3105 and 2139ms, the other was
   tightly clustered). The field costs nothing measurable, and nothing in the direction of a
   regression. Phase 5 measures properly.
@@ -267,7 +283,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   previously recorded.** `api/dialogue/route.ts` passed `status: 'completed'` into `commitTurn`,
   which set `status`/`end_reason`/`ended_at` inside the turn transaction. The client then POSTed
   `/end`, which called `requireSession()` with no `allowEnded`, saw an already-completed session,
-  and returned **409** — silently, because `use-turn.ts:117` never checked the response. So on the
+  and returned **409** silently, because `use-turn.ts:117` never checked the response. So on the
   farewell path, the *normal success path*, the `session_end` event was never appended, the persona
   metrics were never computed and `persona_classified` was never written. Only `hearts_exhausted`
   and `manual` produced a complete record.
@@ -279,13 +295,13 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   route once the response has flushed and still inside the same invocation: the learner gets the
   report link with no wait behind a model call, the scoring happens even if they close the tab, and
   the paid call stays behind the httpOnly cookie even though the report it produces is public to
-  read. One retry, and only for the kinds the taxonomy marks retryable — verified by a forced 404,
+  read. One retry, and only for the kinds the taxonomy marks retryable. Verified by a forced 404,
   which classified as non-retryable and correctly did not burn a second call.
 
   `saveCompetenceScores` is now conditional on `competence_scores is null`, closing the
   last-write-wins race the route's read-through idempotency check left open.
 
-- **Open decision 3 — SETTLED with numbers. Haiku stays.** `scoringModel()` is its own constant
+- **Open decision 3: SETTLED with numbers. Haiku stays.** `scoringModel()` is its own constant
   rather than an alias of the dialogue model's, and `npm run eval -- --model=<id>` runs the whole
   suite against anything and stamps the id into the result file (it previously recorded only
   `gateway` / `anthropic direct`, so two runs were indistinguishable). Both runs are committed
@@ -300,13 +316,13 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   | $/MTok in-out | 1 / 5 | 2 / 10, plus ~340 reasoning tokens a call |
 
   The larger model matched on the one margin that was close, was worse on the other two and on
-  stability, and was *less* consistent on exactly the judgement this phase added — declining
+  stability, and was *less* consistent on exactly the judgement this phase added: it declined
   `strategic` on some runs of a transcript and scoring it on others. The honest answer to `2.22` is
   that the model was never the weak part of this call. The rubric was.
 
   One finding worth keeping from the comparison: Sonnet 5 runs adaptive thinking by default and
   spent 336 of the old 500-token output budget on reasoning before being cut off at
-  `finishReason: 'length'`, which surfaced as `malformed_output` and, correctly, no score at all —
+  `finishReason: 'length'`, which surfaced as `malformed_output` and, correctly, no score at all 
   Phase 2's taxonomy catching a model swap. `MAX_OUTPUT_TOKENS` is now 2000; a ceiling is not a
   spend, so it costs nothing on a model that does not think.
 
@@ -315,14 +331,14 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 - **A session abandoned between the last turn and the end POST stays `active` forever.** Making
   `/end` the single writer of termination means nothing marks a session finished if the tab dies
   first. The `abandoned` status exists in the 0001 schema for exactly this and nothing sets it. v1
-  had the same gap and had built the machinery to detect it — `session:{id}:alive`, which nothing
+  had the same gap and had built the machinery to detect it, `session:{id}:alive`, which nothing
   ever consumed (`session-service/index.js:567`). A reaper is a background job and is not Phase 4.
   Two such rows already exist from the Phase 4 browser runs.
 
 - **The scoring retry is bounded by the invocation, not just by the error kind. Found in review.**
   `after()` runs inside the end route's `maxDuration` (60s), a model call is bounded at 30s, and
   `timeout` classifies as retryable directly (`ai/errors.ts:108`) rather than through
-  `RETRYABLE_KINDS` — so two attempts plus the 1.5s delay came to 61.5s. The failure was not a lost
+  `RETRYABLE_KINDS`, so two attempts plus the 1.5s delay came to 61.5s. The failure was not a lost
   retry: the invocation would be killed after `setScoringState(id, 'running')` and before any
   terminal write, leaving a row nothing would ever move and a public report saying "Scoring this
   session, reload in a few seconds" permanently. Exactly the lie 0003 exists to prevent, put back
@@ -333,7 +349,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   failure with a nonexistent model produced `provider 404: model: claude-does-not-exist-9`, and
   `fromStatus` (`lib/ai/errors.ts:45-59`) has no 404 case, so it fell to the default. The report
   therefore told the reader "Reported cause: stream failed" for what is really a configuration
-  error. Harmless — nothing was fabricated and the failure was loud — but the taxonomy could be
+  error. Harmless, since nothing was fabricated and the failure was loud, but the taxonomy could be
   sharper. Phase 2's file, so it goes here rather than into a Phase 4 diff.
 
 - **`persona_classified` is computed on every session end and rendered nowhere.** The end route
@@ -352,12 +368,12 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   has written `.next/types`, and `.next/` is gitignored. CI's `checks` job runs `npm ci` and then
   `npm run typecheck` *before* `npm run build`, so it would fail there on a Phase-0 line. It has
   not surfaced yet only because `v2-rebuild` is unpushed and `.github/workflows/v2.yml` has
-  therefore never executed — `gh run list` shows nothing but v1's April runs.
+  therefore never executed, `gh run list` shows nothing but v1's April runs.
 
   Phase 4's report page deliberately does NOT add to this: it declares
   `{ params: Promise<{ sessionId: string }> }` by hand, the way all six existing route handlers
   already do, rather than using the generated `PageProps`. Verified by deleting `.next/` and
-  running typecheck — `layout.tsx` is the only remaining error.
+  running typecheck, `layout.tsx` is the only remaining error.
 
   The fix is one line, `"pretypecheck": "next typegen"` in `v2/package.json`, matching the
   `predev`/`prebuild` scripts already there. Left undone because package-level config is not
@@ -396,7 +412,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   platform default. A truncated judge call is a heart not charged, and it would have censored that
   route's own slow tail. Now 60, matching the other model routes.
 
-- **Open decision 4 — session recording to Blob: DECLINED, with the reasoning recorded.** It costs
+- **Open decision 4, session recording to Blob: DECLINED, with the reasoning recorded.** It costs
   storage and adds an orphan-write failure mode of exactly the shape of v1's `S10`, in a phase whose
   subject is measurement. v1's finding `2.7` was already "three ways to serve one video". The
   report's per-turn emotion timeline on a real clock from `session_events.created_at` carries more
@@ -431,7 +447,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   are re-sent every turn. Nothing in this phase's scope, but it is where the cost is.
 
 - **Every latency figure carries ~300ms of Pacific.** Functions run in `iad1` and the measurements
-  were taken from Singapore. `POST /api/translate` — pure function, no I/O, no model — measures the
+  were taken from Singapore. `POST /api/translate`, pure function, no I/O, no model, measures the
   transport at p50 293ms, so a client near the function would see roughly 1000ms rather than
   1317ms. Both numbers are real; neither is quotable without saying where the client was. A run
   from a US-East host would settle it.
@@ -441,7 +457,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   be averaged into the headline numbers.
 
 - **Per-frame cost was measured against a canvas-sourced stream, not a hardware webcam**, and only
-  on an M-series Mac. Tablets remain unmeasured, unchanged from Phase 3 — but the mechanism is now
+  on an M-series Mac. Tablets remain unmeasured, unchanged from Phase 3, but the mechanism is now
   device-agnostic and self-reporting, so opening the production alias on any device and playing one
   session lands the numbers in the database without further tooling.
 
