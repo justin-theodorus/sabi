@@ -1,4 +1,5 @@
 import type { AACIcon } from '@/components/AACBoard'
+import type { ExpressionSample, Signals } from '@/lib/expression/types'
 import type { ModeId, NpcEmotion, PersonaId, ScenarioId } from '@/lib/prompt/types'
 import type { EndReason } from '@/lib/session/types'
 
@@ -62,10 +63,13 @@ export interface SessionConfig {
  */
 export type Effect =
   | { readonly kind: 'createSession'; readonly id: string }
-  | { readonly kind: 'dialogue'; readonly id: string; readonly icons: readonly string[]; readonly npcInitiated: boolean }
-  | { readonly kind: 'judge'; readonly id: string; readonly learnerText: string; readonly icons: readonly string[] }
+  | { readonly kind: 'dialogue'; readonly id: string; readonly icons: readonly string[]; readonly npcInitiated: boolean; readonly expression: ExpressionWindow }
+  | { readonly kind: 'judge'; readonly id: string; readonly learnerText: string; readonly icons: readonly string[]; readonly expression: ExpressionWindow }
   | { readonly kind: 'logEvent'; readonly id: string; readonly type: 'heart_lost' | 'event_fired'; readonly payload: Record<string, unknown> }
   | { readonly kind: 'endSession'; readonly id: string; readonly reason: EndReason }
+
+/** Null means no camera, no permission, or no face — not an empty window. */
+export type ExpressionWindow = readonly ExpressionSample[] | null
 
 export interface TurnState {
   readonly config: SessionConfig
@@ -89,6 +93,17 @@ export interface TurnState {
   /** Set when the survival timeout has already fired for the current silence. */
   readonly timeoutCharged: boolean
 
+  /**
+   * What the learner's face has done since the last turn was sent. `at` is a wall clock here and
+   * is made relative to the window start on the way out; see `takeExpression` in the reducer.
+   *
+   * It is cleared at SUBMIT, not on success. v1 called resetEmotionLog() only after a successful
+   * streamDialogue (session/page.tsx:575) and not in the catch below it (:584-587), so a failed
+   * turn's samples carried into the next one and the NPC reacted to a face the learner made
+   * during a turn that errored (finding 3.8).
+   */
+  readonly expressionWindow: readonly ExpressionSample[]
+
   readonly pending: readonly Effect[]
 }
 
@@ -100,7 +115,7 @@ export type TurnAction =
   | { readonly type: 'ICON_REMOVED'; readonly index: number }
   | { readonly type: 'SELECTION_CLEARED' }
   | { readonly type: 'SUBMIT_REQUESTED'; readonly now: number }
-  | { readonly type: 'JUDGE_VERDICT'; readonly offContext: boolean; readonly icons: readonly string[]; readonly now: number }
+  | { readonly type: 'JUDGE_VERDICT'; readonly offContext: boolean; readonly icons: readonly string[]; readonly expression: ExpressionWindow; readonly now: number }
   | { readonly type: 'STREAM_STARTED' }
   | { readonly type: 'STREAM_DELTA'; readonly text: string }
   | { readonly type: 'STREAM_METADATA'; readonly turnIndex: number; readonly hearts: number; readonly npcEmotion: NpcEmotion; readonly sessionComplete: boolean; readonly learnerText: string; readonly activeEventLine: string | null }
@@ -109,4 +124,5 @@ export type TurnAction =
   | { readonly type: 'HEART_LOST'; readonly reason: 'timeout' | 'off_context'; readonly hearts?: number; readonly now: number }
   | { readonly type: 'END_REQUESTED'; readonly reason: EndReason }
   | { readonly type: 'EFFECT_SETTLED'; readonly id: string }
+  | { readonly type: 'EXPRESSION_SAMPLED'; readonly signals: Signals; readonly now: number }
   | { readonly type: 'TICK'; readonly now: number }

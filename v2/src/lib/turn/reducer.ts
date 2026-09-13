@@ -20,8 +20,15 @@
 //    at the same index and session_complete (which needs turn_index >= 6) was unreachable by
 //    bumps alone.
 
+import { MAX_EXPRESSION_SAMPLES } from '@/lib/expression/schema'
 import { BUMP_MS, MAX_HEARTS, SURVIVAL_TIMEOUT_MS } from '@/lib/turn/constants'
-import type { Effect, SessionConfig, TurnAction, TurnState } from '@/lib/turn/types'
+import type {
+  Effect,
+  ExpressionWindow,
+  SessionConfig,
+  TurnAction,
+  TurnState,
+} from '@/lib/turn/types'
 
 export function initialState(config: SessionConfig, now: number): TurnState {
   return {
@@ -39,6 +46,7 @@ export function initialState(config: SessionConfig, now: number): TurnState {
     endReason: null,
     lastActivityAt: now,
     timeoutCharged: false,
+    expressionWindow: [],
     pending: [],
   }
 }
@@ -58,6 +66,28 @@ const touch = (state: TurnState, now: number): TurnState => ({
   lastActivityAt: now,
   timeoutCharged: false,
 })
+
+/**
+ * Closes the expression window and hands it over, with `at` rebased to the window start so the
+ * wire never carries a wall clock.
+ *
+ * Every caller clears `expressionWindow` in the same expression, which is the point: a window is
+ * consumed exactly once, at the moment the turn is sent, whether or not that turn succeeds.
+ */
+function takeExpression(state: TurnState): {
+  readonly expression: ExpressionWindow
+  readonly cleared: TurnState
+} {
+  const cleared: TurnState = { ...state, expressionWindow: [] }
+  const window = state.expressionWindow
+  if (window.length === 0) return { expression: null, cleared }
+
+  const base = window[0].at
+  return {
+    expression: window.map((sample) => ({ at: sample.at - base, signals: sample.signals })),
+    cleared,
+  }
+}
 
 export function turnReducer(state: TurnState, action: TurnAction): TurnState {
   switch (action.type) {
@@ -101,21 +131,31 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
       if (state.phase !== 'idle' || state.selected.length === 0) return state
 
       const icons = state.selected.map((icon) => icon.label)
-      const next = { ...touch(state, action.now), phase: 'submitting' as const, error: null }
+      const { expression, cleared } = takeExpression(state)
+      const next = { ...touch(cleared, action.now), phase: 'submitting' as const, error: null }
 
       // Survival gates the turn on the off-context judge, which may cost a heart before the
       // dialogue call (finding S12 — deliberate, and the reason the heart is charged first is
       // that an off-context reply is the thing being penalised, not the NPC's reaction to it).
       if (state.config.mode === 'survival' && state.transcript.some((t) => t.role === 'learner')) {
+        // The window rides the judge effect and comes back on JUDGE_VERDICT, exactly as `icons`
+        // already does, so survival's extra hop cannot lose it.
         return enqueue(next, {
           kind: 'judge',
           id: effectId(state, 'judge'),
           learnerText: icons.join(' '),
           icons,
+          expression,
         })
       }
 
-      return enqueue(next, { kind: 'dialogue', id: effectId(state, 'dialogue'), icons, npcInitiated: false })
+      return enqueue(next, {
+        kind: 'dialogue',
+        id: effectId(state, 'dialogue'),
+        icons,
+        npcInitiated: false,
+        expression,
+      })
     }
 
     case 'JUDGE_VERDICT': {
@@ -136,6 +176,7 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         id: effectId(charged, 'dialogue'),
         icons: action.icons,
         npcInitiated: false,
+        expression: action.expression,
       })
     }
 
@@ -234,6 +275,21 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
     case 'EFFECT_SETTLED':
       return { ...state, pending: state.pending.filter((effect) => effect.id !== action.id) }
 
+    case 'EXPRESSION_SAMPLED': {
+      // Only while the learner is composing. Samples taken during a stream belong to the NPC's
+      // turn, not the learner's, and reading them as "what their face did while composing this
+      // message" would be a lie about their provenance.
+      if (state.phase !== 'idle') return state
+
+      const window = [...state.expressionWindow, { at: action.now, signals: action.signals }]
+      return {
+        ...state,
+        // Oldest first, so a long compose keeps the most recent minute. v1 capped nothing and sent
+        // every sample of a 60-second turn into a 150-token call (emotion-summary.ts:38-42).
+        expressionWindow: window.slice(-MAX_EXPRESSION_SAMPLES),
+      }
+    }
+
     case 'TICK':
       return tick(state, action.now)
 
@@ -282,9 +338,12 @@ function tick(state: TurnState, now: number): TurnState {
   }
 
   if (silent >= BUMP_MS[state.config.mode]) {
+    // The silence itself is the window worth sending: a bump is the NPC reacting to someone who
+    // has stopped, and what their face did while stopping is the whole signal.
+    const { expression, cleared } = takeExpression(state)
     return enqueue(
-      { ...state, phase: 'bumping', lastActivityAt: now },
-      { kind: 'dialogue', id: effectId(state, 'bump'), icons: [], npcInitiated: true },
+      { ...cleared, phase: 'bumping', lastActivityAt: now },
+      { kind: 'dialogue', id: effectId(state, 'bump'), icons: [], npcInitiated: true, expression },
     )
   }
 

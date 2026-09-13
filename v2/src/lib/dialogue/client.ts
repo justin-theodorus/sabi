@@ -1,6 +1,7 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from 'ai'
 
 import type { TurnData, TurnErrorData } from '@/lib/dialogue/stream-types'
+import type { ExpressionSample } from '@/lib/expression/types'
 import { TurnFailure } from '@/lib/dialogue/turn-failure'
 
 /**
@@ -27,7 +28,12 @@ export interface DialogueCallbacks {
 }
 
 export async function streamDialogue(
-  body: { icons: readonly string[]; npcInitiated: boolean },
+  body: {
+    icons: readonly string[]
+    npcInitiated: boolean
+    /** Ten numbers per second of composing. Never a frame, never a string. */
+    expression: readonly ExpressionSample[] | null
+  },
   callbacks: DialogueCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {

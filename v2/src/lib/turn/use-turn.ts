@@ -70,12 +70,18 @@ export function useTurn(config: SessionConfig) {
           // Fail open: a judge outage must not cost a heart. Deliberate, and stated here rather
           // than emerging from a bare catch the way v1's did (finding S12).
           const offContext = response.ok ? Boolean((await response.json()).offContext) : false
-          return { type: 'JUDGE_VERDICT', offContext, icons: effect.icons, now: Date.now() }
+          return {
+            type: 'JUDGE_VERDICT',
+            offContext,
+            icons: effect.icons,
+            expression: effect.expression,
+            now: Date.now(),
+          }
         }
 
         case 'dialogue': {
           await streamDialogue(
-            { icons: effect.icons, npcInitiated: effect.npcInitiated },
+            { icons: effect.icons, npcInitiated: effect.npcInitiated, expression: effect.expression },
             {
               onStart: () => dispatch({ type: 'STREAM_STARTED' }),
               onDelta: (text) => dispatch({ type: 'STREAM_DELTA', text }),

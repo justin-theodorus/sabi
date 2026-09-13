@@ -16,3 +16,7 @@ export const MAX_HEARTS = 5
 
 /** One clock for the whole page, replacing v1's three independent timers. */
 export const TICK_MS = 1_000
+
+/** Webcam sample rate, matching v1's useEmotionCapture.ts:121. README.md:233 claimed 500ms and was
+ *  wrong about v1 too. At ~8ms of inference per frame this is under 1% of a core. */
+export const EXPRESSION_SAMPLE_MS = 1_000

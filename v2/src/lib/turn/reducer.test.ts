@@ -6,9 +6,11 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import type { AACIcon } from '@/components/AACBoard'
+import { MAX_EXPRESSION_SAMPLES } from '@/lib/expression/schema'
+import { ZERO_SIGNALS } from '@/lib/expression/signals'
 import { BUMP_MS, SURVIVAL_TIMEOUT_MS } from '@/lib/turn/constants'
 import { initialState, secondsLeft, turnReducer } from '@/lib/turn/reducer'
-import type { SessionConfig, TurnAction, TurnState } from '@/lib/turn/types'
+import type { Effect, SessionConfig, TurnAction, TurnState } from '@/lib/turn/types'
 
 const T0 = 1_000_000
 
@@ -340,7 +342,7 @@ test('an off-context verdict costs a heart and still runs the turn', () => {
     { type: 'ICON_SELECTED', icon: icon('tea') },
     { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
   ))
-  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, icons: ['tea'], now: T0 + 2000 })
+  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, expression: null, icons: ['tea'], now: T0 + 2000 })
   assert.equal(judged.hearts, 4)
   assert.deepEqual(effectKinds(judged), ['logEvent', 'dialogue'])
 })
@@ -351,7 +353,7 @@ test('an off-context verdict on the last heart ends the session without calling 
     { type: 'ICON_SELECTED', icon: icon('tea') },
     { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
   ))
-  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, icons: ['tea'], now: T0 + 2000 })
+  const judged = turnReducer(submitting, { type: 'JUDGE_VERDICT', offContext: true, expression: null, icons: ['tea'], now: T0 + 2000 })
   assert.equal(judged.phase, 'over')
   assert.ok(!effectKinds(judged).includes('dialogue'))
   assert.equal(judged.pending.filter((e) => e.kind === 'endSession').length, 1)
@@ -406,4 +408,106 @@ test('the countdown does not run while the NPC is replying', () => {
     { type: 'STREAM_STARTED' },
   )
   assert.equal(secondsLeft(streaming, T0 + 29_000), 30)
+})
+
+// ── The expression window (Phase 3) ──────────────────────────────────────────
+
+const signals = (smile: number) => ({ ...ZERO_SIGNALS, smile })
+
+const sample = (state: TurnState, at: number, smile = 0.5): TurnState =>
+  turnReducer(state, { type: 'EXPRESSION_SAMPLED', signals: signals(smile), now: at })
+
+const dialogueEffect = (state: TurnState) =>
+  state.pending.find((e) => e.kind === 'dialogue') as Extract<Effect, { kind: 'dialogue' }>
+
+test('samples accumulate while the learner is composing', () => {
+  const state = sample(sample(started(), T0), T0 + 1000)
+  assert.equal(state.expressionWindow.length, 2)
+})
+
+test('samples taken during a stream are dropped, because they are not the learner composing', () => {
+  const streaming = run(
+    started(),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 },
+    { type: 'STREAM_STARTED' },
+  )
+  assert.equal(sample(streaming, T0 + 1000).expressionWindow.length, 0)
+})
+
+test('the window is capped, dropping oldest, so a long compose cannot grow unbounded', () => {
+  // v1 capped nothing: a 60-second turn sent 60 numbered lines into a 150-token call
+  // (frontend/src/lib/emotion-summary.ts:38-42).
+  let state = started()
+  for (let i = 0; i < MAX_EXPRESSION_SAMPLES + 10; i++) state = sample(state, T0 + i * 1000, i / 100)
+  assert.equal(state.expressionWindow.length, MAX_EXPRESSION_SAMPLES)
+  assert.equal(state.expressionWindow.at(-1)?.at, T0 + (MAX_EXPRESSION_SAMPLES + 9) * 1000)
+})
+
+test('submitting hands the window to the dialogue effect, rebased so no wall clock goes on the wire', () => {
+  const state = run(
+    sample(sample(started(), T0), T0 + 2000),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
+  )
+  assert.deepEqual(
+    dialogueEffect(state).expression?.map((s) => s.at),
+    [0, 2000],
+  )
+  assert.equal(state.expressionWindow.length, 0)
+})
+
+test('a turn with no samples sends null, not an empty window', () => {
+  const state = run(
+    started(),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 },
+  )
+  assert.equal(dialogueEffect(state).expression, null)
+})
+
+test('a failed turn does not carry its samples into the next one', () => {
+  // Finding 3.8. v1 called resetEmotionLog() only after a successful streamDialogue
+  // (session/page.tsx:575) and not in the catch below it, so the NPC's next reply reacted to a
+  // face the learner made during a turn that errored. Clearing at submit closes it by
+  // construction rather than by remembering to add a second reset.
+  const failed = run(
+    sample(started(), T0),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 },
+    { type: 'STREAM_STARTED' },
+    { type: 'STREAM_FAILED', kind: 'timeout', now: T0 + 1000 },
+  )
+  assert.equal(failed.expressionWindow.length, 0)
+
+  const retried = run(
+    drain(failed),
+    { type: 'ICON_SELECTED', icon: icon('rice') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
+  )
+  assert.equal(dialogueEffect(retried).expression, null)
+})
+
+test('survival carries the window through the judge hop', () => {
+  const submitting = drain(run(
+    sample(survivalAfterOneTurn(), T0 + 2000),
+    { type: 'ICON_SELECTED', icon: icon('tea') },
+    { type: 'SUBMIT_REQUESTED', now: T0 + 2000 },
+  ))
+  const judged = turnReducer(submitting, {
+    type: 'JUDGE_VERDICT',
+    offContext: false,
+    icons: ['tea'],
+    expression: [{ at: 0, signals: signals(0.5) }],
+    now: T0 + 2000,
+  })
+  assert.equal(dialogueEffect(judged).expression?.length, 1)
+})
+
+test('an NPC bump sends the silence window, which is the whole signal a bump reacts to', () => {
+  const silent = sample(started(), T0 + 1000)
+  const bumped = turnReducer(silent, { type: 'TICK', now: T0 + BUMP_MS.learning + 1000 })
+  assert.equal(bumped.phase, 'bumping')
+  assert.equal(dialogueEffect(bumped).expression?.length, 1)
+  assert.equal(bumped.expressionWindow.length, 0)
 })
