@@ -6,6 +6,14 @@
 // disagree with, which is another way of saying there was nothing to evaluate — two runs over the
 // same transcript could differ by forty points and neither would be wrong. The anchors below are
 // what the eval suite's ordering and separation assertions are actually testing against.
+//
+// Phase 4 adds the second substantive change: a not-observed rule for `strategic`. The bands alone
+// could not tell "the learner cannot repair" from "nothing ever broke, so they never had to", and
+// the instruction to score low when there were no repair attempts made the conflation explicit.
+// Across the committed eval runs strategic was the only dimension where strong fixtures landed in
+// the weak band. The evidence for a breakdown is already in the transcript and needs no new field:
+// the NPC's emotion is model-provided since Phase 2, and `confused` is precisely "I did not
+// understand you".
 
 import { SCENARIO_DESCRIPTIONS } from '@/lib/prompt/constants'
 import type { ScenarioId } from '@/lib/prompt/types'
@@ -19,8 +27,15 @@ const BANDS = `Use the full range. The bands mean:
   81-100 fluent: consistent, flexible, and adapts when something goes wrong
 
 Score each dimension independently. A learner can be fluent socially and absent strategically.
-Do not converge on the middle to be safe: a session with no repair attempts scores low on
-strategic even if everything else went well.`
+Do not converge on the middle to be safe.
+
+The dimension "strategic" is the one that requires an opportunity before it can be scored at all.
+Return null for it if and only if nothing in this session ever gave the learner something to
+repair: the NPC never signalled confusion, never misunderstood, no plan failed, nothing went
+wrong. Null means "no opportunity to observe", not "poor" — a smooth session is not evidence
+against the skill. If a breakdown DID occur and the learner did not recover from it, that is a
+low score and not null. The transcript marks breakdowns for you: the NPC's own emotion is printed
+on each of its lines, and "NPC (confused)" is the NPC reporting that it did not understand.`
 
 const DIMENSIONS = `- operational: use of the AAC board. Icon choice, how icons combine into a
   message, whether the selection matches the intent. The [icons: ...] list is the evidence.
@@ -29,7 +44,7 @@ const DIMENSIONS = `- operational: use of the AAC board. Icon choice, how icons 
 - social: appropriateness of the responses, turn-taking, adherence to the social norms of this
   scenario.
 - strategic: repair strategies. Rephrasing after a misunderstanding, compensating when the NPC
-  does not follow, recovering from a breakdown.
+  does not follow, recovering from a breakdown. Null if no breakdown ever happened — see below.
 - confidence: fluency, initiative-taking, consistency across the session.`
 
 export interface ScoringPromptInput {

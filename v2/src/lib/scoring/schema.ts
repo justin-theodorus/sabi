@@ -24,7 +24,25 @@ export const competenceScoresSchema = z.object({
   ),
   linguistic: dimension('Vocabulary range, message length, grammatical structure of the icons.'),
   social: dimension('Appropriateness, turn-taking, social norms for this scenario.'),
-  strategic: dimension('Repair and rephrasing when the NPC misunderstands or the plan fails.'),
+  // The only nullable dimension, and the only one that needs an OPPORTUNITY before it can be
+  // observed at all. The other four are visible on every turn the learner takes; repair is visible
+  // only once something has gone wrong. Forcing a number here made the rubric score the absence of
+  // a breakdown as the absence of a skill — strong-03 scored a mean of 7/100 strategic in one
+  // recorded eval run and 20/100 in the next, while scoring 84/75/89/82 elsewhere in both, and the
+  // model's own summary for that fixture read "strategic repair skills were not
+  // observed, as the interaction proceeded without misunderstandings". It was already producing the
+  // concept in prose and being made to encode it as a near-zero that a radar renders as a clinical
+  // claim about the learner. Null means no opportunity arose. A breakdown the learner failed to
+  // repair is still a low number.
+  strategic: z
+    .number()
+    .min(0)
+    .max(100)
+    .nullable()
+    .describe(
+      'Repair and rephrasing when the NPC misunderstands or the plan fails. Null if nothing in ' +
+        'the session ever gave the learner something to repair.',
+    ),
   confidence: dimension('Fluency, initiative, consistency across the session.'),
   summary: z.string().min(1).describe('One or two sentences a therapist would find useful.'),
 })
@@ -42,5 +60,16 @@ export const SCORE_DIMENSIONS = [
 
 export type ScoreDimension = (typeof SCORE_DIMENSIONS)[number]
 
-export const overallScore = (scores: CompetenceScoreResult): number =>
-  SCORE_DIMENSIONS.reduce((total, key) => total + scores[key], 0) / SCORE_DIMENSIONS.length
+/**
+ * The mean of the dimensions that were actually observed.
+ *
+ * A not-observed dimension is skipped rather than counted as zero, because counting it would put
+ * back exactly the distortion nullability removes. Null when nothing was observed at all.
+ */
+export const overallScore = (scores: CompetenceScoreResult): number | null => {
+  const observed = SCORE_DIMENSIONS.map((key) => scores[key]).filter(
+    (value): value is number => value !== null,
+  )
+  if (observed.length === 0) return null
+  return observed.reduce((total, value) => total + value, 0) / observed.length
+}

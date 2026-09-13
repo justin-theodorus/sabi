@@ -9,6 +9,9 @@
         "operational",
         "strategic"
       ]
+    ],
+    "observed": [
+      "strategic"
     ]
   },
   "events": [

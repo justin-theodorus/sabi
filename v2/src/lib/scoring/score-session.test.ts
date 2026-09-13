@@ -139,8 +139,31 @@ test('the schema rejects every shape that v1 would have silently accepted', () =
 
 test('overallScore averages the five dimensions and ignores the summary', () => {
   const scores = competenceScoresSchema.parse(JSON.parse(GOOD))
-  const expected = SCORE_DIMENSIONS.reduce((total, key) => total + scores[key], 0) / 5
+  const expected =
+    SCORE_DIMENSIONS.reduce((total, key) => total + (scores[key] ?? 0), 0) / SCORE_DIMENSIONS.length
 
   assert.equal(overallScore(scores), expected)
   assert.equal(overallScore(scores), (72 + 64 + 80 + 35 + 70) / 5)
+})
+
+test('a not-observed dimension is skipped by overallScore, not counted as zero', () => {
+  // Counting it as zero is precisely what the nullable strategic field exists to stop: a session
+  // where nothing went wrong would be scored as a session where repair was attempted and failed.
+  const scores = competenceScoresSchema.parse({
+    ...JSON.parse(GOOD),
+    strategic: null,
+  })
+
+  assert.equal(overallScore(scores), (72 + 64 + 80 + 70) / 4)
+  assert.ok(overallScore(scores)! > (72 + 64 + 80 + 0 + 70) / 5, 'a null must not drag the mean')
+})
+
+test('strategic accepts null but the other four dimensions do not', () => {
+  const base = JSON.parse(GOOD)
+  assert.equal(competenceScoresSchema.safeParse({ ...base, strategic: null }).success, true)
+
+  for (const key of ['operational', 'linguistic', 'social', 'confidence'] as const) {
+    const result = competenceScoresSchema.safeParse({ ...base, [key]: null })
+    assert.equal(result.success, false, `${key} must stay required`)
+  }
 })

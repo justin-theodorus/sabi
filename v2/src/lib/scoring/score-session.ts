@@ -9,7 +9,18 @@ import { competenceScoresSchema, type CompetenceScoreResult } from '@/lib/scorin
 import { countLearnerTurns, type ScoringTurn } from '@/lib/scoring/transcript'
 import type { LanguageModel } from 'ai'
 
-const MAX_OUTPUT_TOKENS = 500 // v1 used 400 (main.py:781); the rubric makes the summary longer.
+/**
+ * v1 used 400 (main.py:781) and Phase 2 used 500, which is ample for the object itself — the
+ * scored response is ~170 tokens of text.
+ *
+ * The headroom is for reasoning models. Measured while comparing models for finding 2.22: Claude
+ * Sonnet 5 runs adaptive thinking by default and spent 336 of a 500-token budget on reasoning
+ * before being cut off at `finishReason: 'length'`, which surfaced as NoObjectGeneratedError ->
+ * `malformed_output` and, correctly, no score at all. A ceiling is not a spend — you are billed
+ * for tokens produced — so raising it costs nothing on a model that does not think, and scoring is
+ * offline anyway, which is the whole reason a bigger model is on the table here.
+ */
+const MAX_OUTPUT_TOKENS = 2_000
 
 /** Below this there is nothing to score, and a score would be invention rather than measurement. */
 export const MIN_SCOREABLE_TURNS = 2

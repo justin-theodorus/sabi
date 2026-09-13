@@ -13,6 +13,9 @@
         "confidence",
         "linguistic"
       ]
+    ],
+    "notObserved": [
+      "strategic"
     ]
   },
   "events": [
