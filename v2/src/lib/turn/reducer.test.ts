@@ -172,7 +172,7 @@ test('a complete turn lands both sides in the transcript and returns to idle', (
     { type: 'STREAM_DELTA', text: 'lah.' },
     {
       type: 'STREAM_METADATA', turnIndex: 1, hearts: 5, npcEmotion: 'neutral',
-      sessionComplete: false, learnerText: 'Rice', activeEventLine: null,
+      completion: null, learnerText: 'Rice', activeEventLine: null,
     },
     { type: 'STREAM_FINISHED', now: T0 + 3000 },
   )
@@ -195,7 +195,7 @@ test("the server's translated text replaces the client's guess in the transcript
     { type: 'STREAM_STARTED' },
     {
       type: 'STREAM_METADATA', turnIndex: 1, hearts: 5, npcEmotion: 'neutral',
-      sessionComplete: false, learnerText: 'I want', activeEventLine: null,
+      completion: null, learnerText: 'I want', activeEventLine: null,
     },
   )
   assert.equal(state.transcript.at(-1)?.text, 'I want')
@@ -280,7 +280,7 @@ test('a bump increments the turn index, unlike v1', () => {
     { type: 'STREAM_DELTA', text: 'Oi, you still there?' },
     {
       type: 'STREAM_METADATA', turnIndex: 1, hearts: 5, npcEmotion: 'confused',
-      sessionComplete: false, learnerText: '', activeEventLine: null,
+      completion: null, learnerText: '', activeEventLine: null,
     },
     { type: 'STREAM_FINISHED', now: T0 + BUMP_MS.learning + 1000 },
   )
@@ -410,7 +410,7 @@ test('a farewell from the server ends the session when the stream finishes', () 
     { type: 'STREAM_DELTA', text: 'Here you go, come again!' },
     {
       type: 'STREAM_METADATA', turnIndex: 7, hearts: 5, npcEmotion: 'happy',
-      sessionComplete: true, learnerText: 'Bye', activeEventLine: null,
+      completion: 'farewell', learnerText: 'Bye', activeEventLine: null,
     },
     { type: 'STREAM_FINISHED', now: T0 + 2000 },
   )

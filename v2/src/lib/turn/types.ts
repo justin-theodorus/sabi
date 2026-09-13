@@ -1,7 +1,7 @@
 import type { AACIcon } from '@/components/AACBoard'
 import type { ExpressionSample, Signals } from '@/lib/expression/types'
 import type { ModeId, NpcEmotion, PersonaId, ScenarioId } from '@/lib/prompt/types'
-import type { EndReason } from '@/lib/session/types'
+import type { CompletionReason, EndReason } from '@/lib/session/types'
 
 /**
  * The turn state machine.
@@ -131,7 +131,7 @@ export type TurnAction =
   | { readonly type: 'JUDGE_VERDICT'; readonly offContext: boolean; readonly icons: readonly string[]; readonly expression: ExpressionWindow; readonly now: number }
   | { readonly type: 'STREAM_STARTED' }
   | { readonly type: 'STREAM_DELTA'; readonly text: string }
-  | { readonly type: 'STREAM_METADATA'; readonly turnIndex: number; readonly hearts: number; readonly npcEmotion: NpcEmotion; readonly sessionComplete: boolean; readonly learnerText: string; readonly activeEventLine: string | null }
+  | { readonly type: 'STREAM_METADATA'; readonly turnIndex: number; readonly hearts: number; readonly npcEmotion: NpcEmotion; readonly completion: CompletionReason | null; readonly learnerText: string; readonly activeEventLine: string | null }
   | { readonly type: 'STREAM_FINISHED'; readonly now: number }
   | { readonly type: 'STREAM_FAILED'; readonly kind: TurnErrorKind; readonly now: number }
   | { readonly type: 'HEART_LOST'; readonly reason: 'timeout' | 'off_context'; readonly hearts?: number; readonly now: number }

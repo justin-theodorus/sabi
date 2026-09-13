@@ -91,7 +91,7 @@ export function useTurn(config: SessionConfig) {
                   turnIndex: data.turnIndex,
                   hearts: data.hearts,
                   npcEmotion: data.npcEmotion as TurnState['npcEmotion'],
-                  sessionComplete: data.sessionComplete,
+                  completion: data.completion,
                   learnerText: data.learnerText,
                   activeEventLine: data.activeEventLine,
                 }),

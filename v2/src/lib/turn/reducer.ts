@@ -228,7 +228,9 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
         hearts: action.hearts,
         npcEmotion: action.npcEmotion,
         activeEventLine: action.activeEventLine,
-        endReason: action.sessionComplete ? 'farewell' : state.endReason,
+        // The server decides both that the session is over and why: a genuine farewell from the
+        // NPC, or the hard turn cap. Finding S11 — v1 collapsed the two into one boolean.
+        endReason: action.completion ?? state.endReason,
       }
     }
 
@@ -244,7 +246,9 @@ export function turnReducer(state: TurnState, action: TurnAction): TurnState {
           : state.transcript,
       }
 
-      if (settled.endReason === 'farewell') return endNow(settled, 'farewell')
+      if (settled.endReason === 'farewell' || settled.endReason === 'turn_cap') {
+        return endNow(settled, settled.endReason)
+      }
       return { ...settled, phase: 'idle' }
     }
 

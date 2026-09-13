@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai'
 
+import type { CompletionReason } from '@/lib/session/types'
 import type { TurnErrorKind } from '@/lib/turn/types'
 
 /**
@@ -14,7 +15,8 @@ export interface TurnData {
   readonly turnIndex: number
   readonly hearts: number
   readonly npcEmotion: string
-  readonly sessionComplete: boolean
+  /** Null while the conversation continues. Finding S11: the reason, not a boolean. */
+  readonly completion: CompletionReason | null
   readonly learnerText: string
   readonly activeEventLine: string | null
   readonly seq: number

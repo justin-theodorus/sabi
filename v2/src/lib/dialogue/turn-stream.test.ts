@@ -10,7 +10,7 @@ const TURN: TurnData = {
   turnIndex: 1,
   hearts: 5,
   npcEmotion: 'neutral',
-  sessionComplete: false,
+  completion: null,
   learnerText: 'I want rice',
   activeEventLine: null,
   seq: 2,
@@ -26,7 +26,7 @@ async function collect(overrides: Partial<TurnStreamArgs>): Promise<Collected> {
   let seen: { reply: string; emotion: NpcEmotion } | null = null
 
   const stream = createTurnStream({
-    model: streamingModel(['{"emotion":"happy","reply":"Hi"}']),
+    model: streamingModel(['{"emotion":"happy","farewell":false,"reply":"Hi"}']),
     instructions: 'be a hawker uncle',
     messages: [{ role: 'user', content: 'rice' }],
     maxOutputTokens: 256,
@@ -56,7 +56,7 @@ const dataOf = (c: Collected, type: string) =>
 
 test('the reply streams as text deltas and the JSON envelope never reaches the client', async () => {
   const collected = await collect({
-    model: streamingModel(['{"emotion":"ha', 'ppy","reply":"Wah, ', 'you want rice?"}']),
+    model: streamingModel(['{"emotion":"ha', 'ppy","farewell":false,"reply":"Wah, ', 'you want rice?"}']),
   })
 
   assert.equal(collected.text, 'Wah, you want rice?')
@@ -73,7 +73,7 @@ test('text parts are opened and closed around the deltas', async () => {
 
 test('the persisted reply is the trimmed prose, not the JSON', async () => {
   const collected = await collect({
-    model: streamingModel(['{"emotion":"sad","reply":"  Aiyo, sold out.  "}']),
+    model: streamingModel(['{"emotion":"sad","farewell":false,"reply":"  Aiyo, sold out.  "}']),
   })
   assert.equal(collected.seen?.reply, 'Aiyo, sold out.')
 })
@@ -101,11 +101,23 @@ test('a transport failure is reported as network', async () => {
   assert.equal(dataOf(collected, 'data-error')?.kind, 'network')
 })
 
+test('a reply with no farewell field never commits a turn', async () => {
+  // Deliberately unlike learnerEmotion, which is nullish so an omitted label cannot cost the
+  // learner their turn. A missing farewell would read as "keep going", which is the stranding
+  // finding S11 describes, so it is required and its absence is a malformed response.
+  const collected = await collect({
+    model: streamingModel(['{"emotion":"happy","reply":"Come again ah!"}']),
+  })
+
+  assert.equal(dataOf(collected, 'data-error')?.kind, 'malformed_output')
+  assert.equal(collected.seen, null, 'nothing was persisted')
+})
+
 test('output that does not satisfy the schema never commits a turn', async () => {
   // The model answered, but with an emotion that has no sprite. v1 would have interpolated it
   // straight into an <img src> (ScenarioStage.tsx:50-51) and 404'd.
   const collected = await collect({
-    model: streamingModel(['{"emotion":"ecstatic","reply":"Hello!"}']),
+    model: streamingModel(['{"emotion":"ecstatic","farewell":false,"reply":"Hello!"}']),
   })
 
   assert.equal(dataOf(collected, 'data-error')?.kind, 'malformed_output')

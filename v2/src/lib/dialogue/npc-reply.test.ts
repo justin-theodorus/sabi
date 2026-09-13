@@ -10,24 +10,45 @@ import {
   type PartialReplyState,
 } from '@/lib/dialogue/npc-reply'
 
-test('the schema declares both metadata fields before reply, so they survive truncation', () => {
+test('the schema declares every metadata field before reply, so they survive truncation', () => {
   // Field order is the emission order. `emotion` first flips the sprite as the NPC starts
-  // speaking; `learnerEmotion` next is the record that a reply truncated at 256 tokens would
-  // otherwise lose. The prose is last because it is the only field that can be long.
-  assert.deepEqual(Object.keys(npcReplySchema.shape), ['emotion', 'learnerEmotion', 'reply'])
+  // speaking; `learnerEmotion` and `farewell` next are the records that a reply truncated at 256
+  // tokens would otherwise lose. The prose is last because it is the only field that can be long.
+  assert.deepEqual(Object.keys(npcReplySchema.shape), [
+    'emotion',
+    'learnerEmotion',
+    'farewell',
+    'reply',
+  ])
+})
+
+test('the farewell flag is required, unlike the learner emotion', () => {
+  // The asymmetry is deliberate. An absent learnerEmotion costs a data point; an absent farewell
+  // would read as "keep talking" and is the stranding finding S11 describes, so it must be stated.
+  assert.equal(npcReplySchema.safeParse({ emotion: 'happy', reply: 'Come again!' }).success, false)
+  assert.equal(
+    npcReplySchema.safeParse({ emotion: 'happy', farewell: true, reply: 'Come again!' }).success,
+    true,
+  )
 })
 
 test('an omitted learner emotion is accepted, because it must not fail the turn', () => {
-  assert.equal(npcReplySchema.safeParse({ emotion: 'happy', reply: 'hi' }).success, true)
+  assert.equal(npcReplySchema.safeParse({ emotion: 'happy', farewell: false, reply: 'hi' }).success, true)
   assert.equal(
-    npcReplySchema.safeParse({ emotion: 'happy', learnerEmotion: null, reply: 'hi' }).success,
+    npcReplySchema.safeParse({ emotion: 'happy', learnerEmotion: null, farewell: false, reply: 'hi' })
+      .success,
     true,
   )
 })
 
 test('the schema accepts every label in the learner vocabulary and rejects the rest', () => {
   for (const learnerEmotion of LEARNER_EMOTIONS) {
-    const result = npcReplySchema.safeParse({ emotion: 'happy', learnerEmotion, reply: 'hi' })
+    const result = npcReplySchema.safeParse({
+      emotion: 'happy',
+      learnerEmotion,
+      farewell: false,
+      reply: 'hi',
+    })
     assert.equal(result.success, true, learnerEmotion)
   }
   // v1 interpolated whatever string the model returned straight into the next system prompt
@@ -35,19 +56,21 @@ test('the schema accepts every label in the learner vocabulary and rejects the r
   const rejected = npcReplySchema.safeParse({
     emotion: 'happy',
     learnerEmotion: 'exasperated',
+    farewell: false,
     reply: 'hi',
   })
   assert.equal(rejected.success, false)
 })
 
 test('the schema rejects an emotion with no sprite', () => {
-  const result = npcReplySchema.safeParse({ emotion: 'ecstatic', reply: 'hi' })
+  const result = npcReplySchema.safeParse({ emotion: 'ecstatic', farewell: false, reply: 'hi' })
   assert.equal(result.success, false)
 })
 
 test('the schema accepts all six sprite emotions', () => {
   for (const emotion of ['happy', 'sad', 'mad', 'confused', 'surprised', 'neutral']) {
-    assert.equal(npcReplySchema.safeParse({ emotion, reply: 'hi' }).success, true, emotion)
+    const parsed = npcReplySchema.safeParse({ emotion, farewell: false, reply: 'hi' })
+    assert.equal(parsed.success, true, emotion)
   }
 })
 

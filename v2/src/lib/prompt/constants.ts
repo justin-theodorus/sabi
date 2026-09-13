@@ -90,9 +90,6 @@ export const PROMPT_TAIL =
   'PRIORITY RULE: If instructions conflict, the [MODE] behavior takes precedence. ' +
   'In Survival Mode, authenticity and realism are more important than being supportive.'
 
-// main.py:507
-export const FAREWELL_MARKERS: Record<ScenarioId, readonly string[]> = {
-  hawker_centre: [
-    'come again', 'here you go', 'enjoy', 'bye', 'see you', 'food ready', 'take care', 'next customer',
-  ],
-}
+// v1's FAREWELL_MARKERS (main.py:506-511) lived here until Phase 4. It is deleted rather than
+// retired in place: the NPC now reports its own farewell as a schema field, so a substring list
+// would be a second, disagreeing source of truth. See sessionCompletion in build-system-prompt.ts.

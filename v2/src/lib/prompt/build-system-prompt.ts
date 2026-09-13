@@ -6,7 +6,6 @@
 // shape the Phase 2 golden tests need.
 
 import {
-  FAREWELL_MARKERS,
   MODE_PROMPTS,
   PERSONALITY_PROMPTS,
   PERSONA_PROMPTS,
@@ -14,7 +13,8 @@ import {
   SCENARIO_PROMPTS,
   SUPPORT_PROMPTS,
 } from '@/lib/prompt/constants'
-import type { PromptInput, ScenarioId } from '@/lib/prompt/types'
+import type { CompletionReason } from '@/lib/session/types'
+import type { PromptInput } from '@/lib/prompt/types'
 
 type PartFn = (input: PromptInput) => string | null
 
@@ -143,24 +143,24 @@ export function buildSystemPrompt(input: PromptInput): string {
 }
 
 /**
- * main.py:569-570. Kept as-is for Phase 1 so the port is like-for-like, plus a hard turn cap.
+ * Whether this turn ended the session, and which way. Finding S11, resolved.
  *
- * Finding S11: v1 required a scenario-specific farewell substring, so a scenario id outside the
- * four-key dict got an empty marker list and could never complete — the session only ended on a
- * manual exit or on running out of hearts. The cap makes stranding impossible. Phase 4 replaces
- * this rule outright.
+ * v1 was `turn_index >= 6 and any(m in reply.lower() for m in markers)` (main.py:570, :670) over a
+ * per-scenario substring list. Three things were wrong with it and only one was the stranding:
+ * the markers fired on ordinary words (`queue_shop` listed 'sorry' and 'alright'), an unknown
+ * scenario id got an empty list and could never complete, and a session that hit the hard cap was
+ * indistinguishable from one that genuinely finished.
+ *
+ * Now the model reports its own farewell as a schema field (lib/dialogue/npc-reply.ts) and this
+ * function only applies the two rules that are genuinely policy: a floor, so a session cannot end
+ * before the learner has had a conversation, and a cap, so it cannot run forever. The caller gets
+ * the reason rather than a boolean, which is what finally lets `turn_cap` be written.
  */
 const MIN_COMPLETE_TURN = 6
 const MAX_TURN = 12
 
-export function isSessionComplete(
-  scenarioId: ScenarioId,
-  reply: string,
-  turnIndex: number,
-): boolean {
-  if (turnIndex >= MAX_TURN) return true
-  if (turnIndex < MIN_COMPLETE_TURN) return false
-
-  const lower = reply.toLowerCase()
-  return FAREWELL_MARKERS[scenarioId].some((marker) => lower.includes(marker))
+export function sessionCompletion(farewell: boolean, turnIndex: number): CompletionReason | null {
+  if (turnIndex >= MAX_TURN) return 'turn_cap'
+  if (turnIndex < MIN_COMPLETE_TURN) return null
+  return farewell ? 'farewell' : null
 }

@@ -23,7 +23,7 @@ const TURN: TurnData = {
   turnIndex: 1,
   hearts: 5,
   npcEmotion: 'neutral',
-  sessionComplete: false,
+  completion: null,
   learnerText: '',
   activeEventLine: null,
   seq: 1,
@@ -32,7 +32,7 @@ const TURN: TurnData = {
 /** Runs one turn with a model that answers with the given emotion and line. */
 async function emotionFor(emotion: NpcEmotion, reply: string): Promise<string | undefined> {
   const stream = createTurnStream({
-    model: streamingModel([JSON.stringify({ emotion, reply })]),
+    model: streamingModel([JSON.stringify({ emotion, farewell: false, reply })]),
     instructions: 'hawker uncle',
     messages: [{ role: 'user', content: 'hi' }],
     maxOutputTokens: 256,

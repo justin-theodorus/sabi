@@ -23,6 +23,15 @@
 // Phase 2 measured that moving `reply` to the front did NOT recover TTFT (1925ms median against a
 // 1650-1949ms range), so field order is not the lever latency turns on here — but it is measured
 // again in this phase rather than assumed.
+//
+// `farewell` (Phase 4) is the same move a third time, for finding S11. v1 decided the conversation
+// was over by searching the finished prose for a scenario-specific substring
+// (FAREWELL_MARKERS, main.py:506-511) — `queue_shop`'s list included 'sorry' and 'alright', words a
+// defensive NPC says constantly and early, and a scenario id outside the four-key dict got an
+// empty list and could never complete at all. It is the same brittleness class as 2.9, and the
+// same answer applies: the model already knows whether it just said goodbye, so ask it in the call
+// that is already happening instead of guessing from the output afterwards. It is a single boolean
+// ahead of the prose, and the TTFT cost is measured rather than assumed.
 
 import { z } from 'zod'
 
@@ -44,6 +53,15 @@ export const npcReplySchema = z.object({
     .describe(
       'How the LEARNER seems, read only from the OBSERVABLE EXPRESSION line in your ' +
         'instructions. Null if that line is absent.',
+    ),
+  // Not nullish, unlike learnerEmotion: the model always knows whether it is ending the
+  // conversation, there is no "the line was absent" case to be generous about, and a missing
+  // value here would silently read as "keep going" — which is the stranding S11 describes.
+  farewell: z
+    .boolean()
+    .describe(
+      'True only if this line ends the conversation: you have said goodbye, handed the food ' +
+        'over, or otherwise concluded. False if you are still talking to the learner.',
     ),
   reply: z
     .string()

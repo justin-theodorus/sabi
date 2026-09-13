@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildSystemPrompt, isSessionComplete } from '@/lib/prompt/build-system-prompt'
+import { buildSystemPrompt, sessionCompletion } from '@/lib/prompt/build-system-prompt'
 import { MODE_PROMPTS, PERSONA_PROMPTS, PROMPT_TAIL, SCENARIO_PROMPTS } from '@/lib/prompt/constants'
 import type { PromptInput } from '@/lib/prompt/types'
 
@@ -188,24 +188,36 @@ test('separates every section with a blank line and never leaves an empty one', 
   assert.ok(parts.every((p) => p.trim().length > 0))
 })
 
-// ── isSessionComplete (main.py:569-570 plus the S11 turn cap) ────────────────
+// ── sessionCompletion (finding S11) ──────────────────────────────────────────
+//
+// The same five cases the keyword rule was pinned to, re-expressed against the model-provided
+// farewell flag, plus the two the old boolean could not express. Where a case turned on a
+// substring ('here you go', 'TAKE CARE ah') the flag now carries what the marker was standing in
+// for, so the before/after stays readable side by side.
 
-test('does not complete before turn 6 even with a farewell marker', () => {
-  assert.equal(isSessionComplete('hawker_centre', 'Here you go!', 5), false)
+test('does not complete before turn 6 even when the NPC says goodbye', () => {
+  assert.equal(sessionCompletion(true, 5), null)
 })
 
-test('completes at turn 6 when the reply carries a farewell marker', () => {
-  assert.equal(isSessionComplete('hawker_centre', 'Here you go, come again!', 6), true)
+test('completes at turn 6 when the NPC reports a farewell', () => {
+  assert.equal(sessionCompletion(true, 6), 'farewell')
 })
 
-test('does not complete at turn 6 without a farewell marker', () => {
-  assert.equal(isSessionComplete('hawker_centre', 'What else you want?', 6), false)
+test('does not complete at turn 6 when the NPC is still talking', () => {
+  assert.equal(sessionCompletion(false, 6), null)
 })
 
-test('matches farewell markers case-insensitively', () => {
-  assert.equal(isSessionComplete('hawker_centre', 'TAKE CARE ah', 7), true)
+test('completes mid-session once the NPC says goodbye', () => {
+  assert.equal(sessionCompletion(true, 7), 'farewell')
 })
 
 test('completes at the turn cap regardless of the reply, so a session cannot strand', () => {
-  assert.equal(isSessionComplete('hawker_centre', 'What else you want?', 12), true)
+  assert.equal(sessionCompletion(false, 12), 'turn_cap')
+})
+
+test('the cap and a genuine farewell are distinguishable, which is the rest of S11', () => {
+  // v1 collapsed both into one boolean, which is why `turn_cap` sat in END_REASONS and in the
+  // 0001 check constraint with nothing ever writing it.
+  assert.equal(sessionCompletion(true, 12), 'turn_cap')
+  assert.notEqual(sessionCompletion(true, 8), sessionCompletion(false, 12))
 })

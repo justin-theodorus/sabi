@@ -44,6 +44,7 @@ export interface TurnStreamArgs {
     reply: string,
     npcEmotion: NpcEmotion,
     learnerEmotion: LearnerEmotion | null,
+    farewell: boolean,
   ) => Promise<TurnData>
 }
 
@@ -105,6 +106,7 @@ export function createTurnStream(
           output.reply.trim(),
           npcEmotion,
           output.learnerEmotion ?? null,
+          output.farewell,
         )
 
         writer.write({ type: 'data-turn', data: turn, transient: true })

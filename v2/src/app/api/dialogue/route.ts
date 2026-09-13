@@ -8,7 +8,7 @@ import { SILENCE_PLACEHOLDER, toModelMessages } from '@/lib/dialogue/history'
 import { summarizeExpression } from '@/lib/expression/aggregate'
 import { expressionWindowSchema } from '@/lib/expression/schema'
 import { parseBody, requireSession } from '@/lib/http'
-import { buildSystemPrompt, isSessionComplete } from '@/lib/prompt/build-system-prompt'
+import { buildSystemPrompt, sessionCompletion } from '@/lib/prompt/build-system-prompt'
 import { activeEventFor, availableIconLabels, SCENARIOS } from '@/lib/scenario/hawker-centre'
 import { commitTurn, loadHistory } from '@/lib/session/repository'
 import type { LearnerExpressionRecord } from '@/lib/session/types'
@@ -100,8 +100,8 @@ export async function POST(request: Request) {
       { role: 'user', content: learnerText || SILENCE_PLACEHOLDER },
     ],
     abortSignal: abort,
-    onReply: async (reply, npcEmotion, learnerEmotion) => {
-      const sessionComplete = isSessionComplete(session.scenarioId, reply, session.turnIndex + 1)
+    onReply: async (reply, npcEmotion, learnerEmotion, farewell) => {
+      const completion = sessionCompletion(farewell, session.turnIndex + 1)
 
       // Recorded per turn, not per frame. v1 stored a row per second in `emotion_events` and the
       // only thing that ever read them counted them into "neutral 62%, happy 21%"
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
         turnIndex,
         hearts: session.hearts,
         npcEmotion,
-        sessionComplete,
+        completion,
         learnerText,
         activeEventLine: activeEvent?.npcLine ?? null,
         seq,
