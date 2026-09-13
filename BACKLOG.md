@@ -11,24 +11,25 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 | TTS | later | ElevenLabs sentence-chunked audio. The design is sound once `2.16` is fixed (v1 gathers every sentence's audio before emitting any, so the listener hears nothing until the slowest call returns). Not load-bearing for either interview angle. |
 | Client-side emotion capture | 3 | The whole point of Phase 3. `PromptInput.emotion` and its prompt branch are already ported and tested, so wiring it is a matter of populating one field. |
 | Session report at `/report/[sessionId]` | 4 | Transcript, emotion timeline, competence radar. The event log is already the transcript, so the data is there. |
-| `/score-session` with tool-use | 2, 4 | Enforced schema replacing v1's markdown-fence stripping and five silent `float(scores.get(k, 50))` defaults. |
+| `/score-session` with tool-use | DONE (2) | Built in Phase 2 as `POST /api/sessions/[id]/score`. Phase 4 renders it. |
 | Other three scenarios | — | Needs commissioned art (`2.11`). Single-scenario done properly is the stronger showcase. |
 | Video recording to Blob | 5 | Optional. Costs storage and adds a failure mode. |
 
 ## Known defects carried forward on purpose
 
-- **`2.9` — `detectNpcEmotion` returns "confused" for almost every reply.** Ported bug-for-bug in
-  `v2/src/lib/dialogue/detect-npc-emotion.ts`, with five tests that pin the wrong behaviour so
-  Phase 2's fix has something to break. Reproduced live again during Phase 1: every turn of the
-  end-to-end run came back `confused` because the NPC is instructed to ask one question per turn
-  and `?` short-circuits the branch order. The NPC sprite is therefore effectively frozen. Fix is
-  Phase 2: ask the model for the emotion in the dialogue call already being made.
+- **`2.9` — RESOLVED in Phase 2.** The keyword classifier is deleted. The NPC's emotion now comes
+  from the dialogue call already being made, as a schema-enforced enum declared first in the
+  response object (`v2/src/lib/dialogue/npc-reply.ts`), so it survives a reply truncated by the
+  256-token cap. Measured over 40 real turns on the production build: 0 `confused`-degenerate
+  runs, 0/40 marker misses, and every reply still ends in a question mark — the exact input that
+  used to force `confused`. The five tests that pinned the defect were rewritten to the corrected
+  expectations in `v2/src/lib/dialogue/npc-emotion.test.ts`, same inputs, so the before/after
+  stays legible.
 
-- **`S5` — error taxonomy.** Phase 1 adds a 30s timeout and a 12-row history cap, which were the
-  two cheap halves. Distinguishing connection errors, overload, timeout and malformed output,
-  each with a defined user-visible behaviour, is Phase 2. Today every model failure surfaces to
-  the learner as one generic message, and the AI SDK masks the underlying cause: an invalid API
-  key reads as "No output generated. Check the stream for errors."
+- **`S5` — RESOLVED in Phase 2.** Ten categories in `v2/src/lib/ai/errors.ts`, each with defined
+  learner-facing copy in `v2/src/lib/turn/error-messages.ts`, and none of them costs a heart. An
+  invalid key now reads as `provider_rejected` with the real cause in the server log, rather than
+  "No output generated. Check the stream for errors."
 
 - **`S6` — prompt injection.** `custom_npc_prompt` was dropped from `PromptInput` entirely rather
   than sanitised, since v1 had no legitimate caller for it. `activeEvent` and `availableIcons`
@@ -67,3 +68,34 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   so far because it is a project security setting.
 - **NPC sprites are ~2.4MB each, 14MB total.** Served through `next/image`, so they are optimised
   on delivery, but the source assets are worth compressing before Phase 5 measures anything.
+
+## Surfaced by Phase 2, deferred on purpose
+
+- **Structured output costs roughly 200-500ms of TTFT.** Median TTFT over four passes of ten real
+  turns ranged 1650-1949ms against Phase 1's 1449ms baseline, and the spread is dominated by
+  run-to-run variance rather than by the change. Reversing the schema field order to put `reply`
+  first was measured and did NOT recover it (1925ms median, plus a marker miss), so the ordering
+  stays as it is. Phase 5 measures this properly; treat the numbers here as indicative.
+
+- **The scoring rubric penalises absence of opportunity.** `strong-03` scores 7/100 on strategic
+  because nothing ever goes wrong in that transcript, so the learner never has to repair anything.
+  That is not the same as lacking the skill. Either the rubric needs an explicit "not observed"
+  band or the dimension needs to be nullable. Decide at Phase 4, with the report design in hand.
+
+- **Two eval fixtures are arguably mis-tiered, and they were left alone.** `strong-04` (articulate
+  but rude) scores 58 and `mixed-01` (polite but never repairs) scores 42, so both sit outside the
+  band their label claims. The aggregate tier separation still passes comfortably. Retiering them
+  to match the model's output would be tuning the test to the answer, which is the exact failure
+  mode the eval set exists to prevent. Recorded rather than fixed.
+
+- **Gateway errors arrive with their marker symbol stripped.** `GatewayError.isInstance` returns
+  false for the error an invalid `AI_GATEWAY_API_KEY` actually produces; it is a plain `Error` with
+  `name: 'GatewayError'` and no statusCode. The classifier matches on the name as a result, which
+  is brittle against an SDK upgrade. The tests pin the behaviour, so an upgrade that changes it
+  fails loudly rather than silently.
+
+- **`is_repair` has no v2 equivalent.** `2.9` fixed the emotion the flag was derived from, but
+  nothing writes the flag itself. Phase 4 decides whether the therapist log needs it.
+
+- **Three emotion taxonomies are still live.** Six NPC sprite labels, twelve in v1's
+  `/summarize-emotion`, seven from DeepFace. Phase 3 has to reconcile the two learner-side sets.
