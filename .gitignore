@@ -11,3 +11,4 @@ IMPLEMENTATION_PLAN.md
 DEMO_VIDEO_PLAN.md
 .vercel
 .env*
+!.env.example
