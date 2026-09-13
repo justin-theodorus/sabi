@@ -10,7 +10,7 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 | `POST /api/hint` | later | The Learning-mode Sabi hint bar: a second model call 4s after each NPC reply (`SabiHintBar.tsx:25-32`). Not in Phase 1's task list; adds a third route and its own timer to the reducer. |
 | TTS | later | ElevenLabs sentence-chunked audio. The design is sound once `2.16` is fixed (v1 gathers every sentence's audio before emitting any, so the listener hears nothing until the slowest call returns). Not load-bearing for either interview angle. |
 | Client-side emotion capture | DONE (3) | MediaPipe Face Landmarker blendshapes, in the browser. `PromptInput.emotion` is populated by `/api/dialogue`. |
-| Session report at `/report/[sessionId]` | 4 | Transcript, emotion timeline, competence radar. The event log is already the transcript, so the data is there. |
+| Session report at `/report/[sessionId]` | DONE (4) | Public, read-only, no cookie. Transcript, per-turn emotion timeline, competence radar. |
 | `/score-session` with tool-use | DONE (2) | Built in Phase 2 as `POST /api/sessions/[id]/score`. Phase 4 renders it. |
 | Other three scenarios | — | Needs commissioned art (`2.11`). Single-scenario done properly is the stronger showcase. |
 | Video recording to Blob | 5 | Optional. Costs storage and adds a failure mode. |
@@ -77,10 +77,27 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   first was measured and did NOT recover it (1925ms median, plus a marker miss), so the ordering
   stays as it is. Phase 5 measures this properly; treat the numbers here as indicative.
 
-- **The scoring rubric penalises absence of opportunity.** `strong-03` scores 7/100 on strategic
-  because nothing ever goes wrong in that transcript, so the learner never has to repair anything.
-  That is not the same as lacking the skill. Either the rubric needs an explicit "not observed"
-  band or the dimension needs to be nullable. Decide at Phase 4, with the report design in hand.
+- **The scoring rubric penalised absence of opportunity — RESOLVED in Phase 4.** `strategic` is
+  now nullable and nothing else is: it is the only dimension that needs an *opportunity* (a
+  breakdown) before it can be observed at all, while the other four are visible on every turn the
+  learner takes. The rubric returns null if and only if nothing in the transcript ever gave the
+  learner something to repair, and it is pointed at the evidence already in the log — `NPC
+  (confused)` is the NPC reporting that it did not understand.
+
+  It was never just `strong-03`. Strategic was the only dimension where strong fixtures fell into
+  the weak band, across the board. Re-running the suite on the corrected rubric moved far more than
+  that one cell: tier separation improved (strong-mixed 12.8 -> 15.5), `strong-04` went 58 -> 65 and
+  back inside its own label without anyone retiering the fixture, and strategic ROSE where a
+  breakdown genuinely had occurred (`strong-02` 48 -> 71, `mixed-03` 32 -> 78) — the conflation had
+  been depressing the dimension everywhere, not only where there was no opportunity.
+
+  The model was already producing the concept in prose and being forced to encode it as a near-zero:
+  `strong-03`'s own summary read *"strategic repair skills were not observed, as the interaction
+  proceeded without misunderstandings"*. Unprompted, it now declines the dimension on exactly the
+  three fixtures whose transcripts contain no `confused` turn (`strong-03`, `strong-04`, `mixed-02`);
+  only one of the three is asserted, so the other two are unforced agreement. The eval asserts both
+  halves — `strong-03` must decline it and `mixed-01`/`weak-02` must still score it low — because
+  asserting only the first half would let "not observed" become a way out of every hard judgement.
 
 - **Two eval fixtures are arguably mis-tiered, and they were left alone.** `strong-04` (articulate
   but rude) scores 58 and `mixed-01` (polite but never repairs) scores 42, so both sit outside the
@@ -103,8 +120,13 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   over 11s across 12 samples)` and the model labelled the learner `content`. Both the submit path
   and the NPC-bump path carry a window.
 
-- **`is_repair` has no v2 equivalent.** `2.9` fixed the emotion the flag was derived from, but
-  nothing writes the flag itself. Phase 4 decides whether the therapist log needs it.
+- **`is_repair` — DECIDED in Phase 4: not added, and the reason is the interesting part.** The
+  signal v1's flag tried to carry is already in the log, model-provided, once per turn: the NPC's
+  own emotion, where `confused` is precisely "I did not understand you". A second per-turn boolean
+  derived by any other means would repeat `2.9` on a therapist-facing field. The scoring rubric now
+  reads that existing signal instead — see the not-observed band below — and the report prints the
+  NPC's emotion beside each of its lines, so a reader can see where the breakdowns were without
+  anything having to assert that a repair occurred.
 
 - **Emotion taxonomies — RESOLVED in Phase 3, and there were four, not three.** Two remain and
   they describe different subjects: six NPC sprite labels (the character's feeling) and the twelve
@@ -117,10 +139,28 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   `AACBoard.tsx:129-160`), which is learner *vocabulary* rather than learner *state*. Left alone,
   noted for Phase 6 along with the `angry`/`mad` and `surprise`/`surprised` collisions across sets.
 
+- **Per-frame emotion samples are still not persisted, and Phase 4 confirmed they are not needed.**
+  The report's timeline is per turn by design, and the per-turn record carries strictly more than
+  v1's share chart did: the descriptor, the model's label, the intensity, the arc the signals
+  traced, and the sample count, on a real clock from `session_events.created_at`. A verified
+  session rendered twelve readings of the form `appears relaxed / content / turn 11 · 241s / smile
+  0.74 -> 0.78, eyes wide 0.2 -> 0.17, inner brow raised 0.17 -> 0.14, over 14s across 15 samples`.
+  v1 stored `session_offset_ms` on every 1fps row and never read it, so it could say what the
+  learner mostly looked like and never when they were struggling. No `emotion_events` table, and
+  no migration for one.
+
 ## Surfaced by Phase 3, deferred on purpose
 
-- **A failed session start cannot be retried. Phase 1 defect, found by review in Phase 3, NOT
-  fixed — it is outside this phase.** `startedEffects` in `use-turn.ts:25` is a `Set` that is
+- **A failed session start cannot be retried — FIXED in Phase 4, first thing.** `TurnState` gained
+  a monotonic `effectSeq`, incremented in `enqueue`, which is the single place any effect is
+  created; the id is now `${kind}#${seq}`. Uniqueness became structural rather than incidental, the
+  reducer stayed pure, and `use-turn.ts` needed no change at all, so the StrictMode guarantee
+  `startedEffects` exists for is untouched. The same fix closes the identically-shaped hang on a
+  dialogue turn that failed before the stream opened. Two reducer tests pin it, and both were
+  confirmed to FAIL against the old id scheme before the fix went in. The original diagnosis,
+  unchanged:
+
+  **Phase 1 defect, found by review in Phase 3, not fixed there because it was outside that phase.** `startedEffects` in `use-turn.ts:25` is a `Set` that is
   never pruned, and `effectId` (`reducer.ts:55-56`) is
   `${kind}:${turnIndex}:${transcript.length}:${pending.length}`. `SESSION_FAILED`
   (`reducer.ts:115-116`) returns to `lobby` without touching any of those three counters, and
@@ -193,3 +233,130 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
   `enforce_detection=False` (`expression-service/main.py:65-70`), so a failed detection silently
   classified the whole room and every error path returned neutral at 100% (`:91-93`). Worth saying
   out loud: the "DeepFace's 7 classes" bar is lower than it sounds.
+
+
+## Resolved by Phase 4
+
+- **`S11` — RESOLVED.** `isSessionComplete` is gone. The NPC reports its own farewell as a
+  schema-enforced boolean in the dialogue call that was already happening — the same move Phase 2
+  made for `2.9` and Phase 3 made for the learner's emotion, now for the third time — and
+  `FAREWELL_MARKERS` is deleted rather than retired in place, so there is no second, disagreeing
+  source of truth. `sessionCompletion(farewell, turnIndex)` returns the REASON, not a boolean, and
+  applies only the two rules that are genuinely policy: a floor so a session cannot end before the
+  learner has had a conversation, and a cap so it cannot run forever.
+
+  That is what finally lets `turn_cap` be written. It had sat in `END_REASONS` and in the 0001
+  check constraint since Phase 1 with nothing producing it, because a capped session and a real
+  farewell were indistinguishable to every consumer. Verified live: a driven session ran to the cap
+  and the row carries `end_reason: turn_cap`, with the summary screen and the report both saying
+  the conversation ran out of room rather than claiming the order was completed.
+
+  Cost, measured the way Phase 3 measured the emotion loop — ten interleaved pairs, alternating
+  which arm ran first: median TTFT 1319ms with the field and 1591ms without. The delta is negative,
+  which is noise rather than a speedup (one arm carried outliers at 3105 and 2139ms, the other was
+  tightly clustered). The field costs nothing measurable, and nothing in the direction of a
+  regression. Phase 5 measures properly.
+
+- **Two writers owned session termination, and they disagreed. Found while re-scoping Phase 4; not
+  previously recorded.** `api/dialogue/route.ts` passed `status: 'completed'` into `commitTurn`,
+  which set `status`/`end_reason`/`ended_at` inside the turn transaction. The client then POSTed
+  `/end`, which called `requireSession()` with no `allowEnded`, saw an already-completed session,
+  and returned **409** — silently, because `use-turn.ts:117` never checked the response. So on the
+  farewell path, the *normal success path*, the `session_end` event was never appended, the persona
+  metrics were never computed and `persona_classified` was never written. Only `hearts_exhausted`
+  and `manual` produced a complete record.
+
+  `commitTurn` no longer ends anything; `/end` is the single writer of termination. The dialogue
+  route still reports completion on the wire so the client transitions and fires the end effect.
+
+- **Scoring fires on session end, server-side.** `after()` from `next/server`, scheduled by the end
+  route once the response has flushed and still inside the same invocation: the learner gets the
+  report link with no wait behind a model call, the scoring happens even if they close the tab, and
+  the paid call stays behind the httpOnly cookie even though the report it produces is public to
+  read. One retry, and only for the kinds the taxonomy marks retryable — verified by a forced 404,
+  which classified as non-retryable and correctly did not burn a second call.
+
+  `saveCompetenceScores` is now conditional on `competence_scores is null`, closing the
+  last-write-wins race the route's read-through idempotency check left open.
+
+- **Open decision 3 — SETTLED with numbers. Haiku stays.** `scoringModel()` is its own constant
+  rather than an alias of the dialogue model's, and `npm run eval -- --model=<id>` runs the whole
+  suite against anything and stamps the id into the result file (it previously recorded only
+  `gateway` / `anthropic direct`, so two runs were indistinguishable). Both runs are committed
+  under `evals/results/` and both pass 25/25:
+
+  | | Haiku 4.5 | Sonnet 5 |
+  |---|---|---|
+  | strong - mixed margin | 15.5 | 15.9 |
+  | mixed - weak margin | 45.8 | 33.8 |
+  | worst per-fixture sd | 2.6 | 4.6 |
+  | "not observed" applied | 3/3 fixtures, every run | 1/3 consistently; split runs on the other two |
+  | $/MTok in-out | 1 / 5 | 2 / 10, plus ~340 reasoning tokens a call |
+
+  The larger model matched on the one margin that was close, was worse on the other two and on
+  stability, and was *less* consistent on exactly the judgement this phase added — declining
+  `strategic` on some runs of a transcript and scoring it on others. The honest answer to `2.22` is
+  that the model was never the weak part of this call. The rubric was.
+
+  One finding worth keeping from the comparison: Sonnet 5 runs adaptive thinking by default and
+  spent 336 of the old 500-token output budget on reasoning before being cut off at
+  `finishReason: 'length'`, which surfaced as `malformed_output` and, correctly, no score at all —
+  Phase 2's taxonomy catching a model swap. `MAX_OUTPUT_TOKENS` is now 2000; a ceiling is not a
+  spend, so it costs nothing on a model that does not think.
+
+## Surfaced by Phase 4, deferred on purpose
+
+- **A session abandoned between the last turn and the end POST stays `active` forever.** Making
+  `/end` the single writer of termination means nothing marks a session finished if the tab dies
+  first. The `abandoned` status exists in the 0001 schema for exactly this and nothing sets it. v1
+  had the same gap and had built the machinery to detect it — `session:{id}:alive`, which nothing
+  ever consumed (`session-service/index.js:567`). A reaper is a background job and is not Phase 4.
+  Two such rows already exist from the Phase 4 browser runs.
+
+- **The scoring retry is bounded by the invocation, not just by the error kind. Found in review.**
+  `after()` runs inside the end route's `maxDuration` (60s), a model call is bounded at 30s, and
+  `timeout` classifies as retryable directly (`ai/errors.ts:108`) rather than through
+  `RETRYABLE_KINDS` — so two attempts plus the 1.5s delay came to 61.5s. The failure was not a lost
+  retry: the invocation would be killed after `setScoringState(id, 'running')` and before any
+  terminal write, leaving a row nothing would ever move and a public report saying "Scoring this
+  session, reload in a few seconds" permanently. Exactly the lie 0003 exists to prevent, put back
+  by the retry. Now gated on there being room for a whole second attempt
+  (`shouldRetryScoring`, pure and tested at the boundary).
+
+- **An unknown model id classifies as `stream_failed`, not `provider_rejected`.** Forcing a scoring
+  failure with a nonexistent model produced `provider 404: model: claude-does-not-exist-9`, and
+  `fromStatus` (`lib/ai/errors.ts:45-59`) has no 404 case, so it fell to the default. The report
+  therefore told the reader "Reported cause: stream failed" for what is really a configuration
+  error. Harmless — nothing was fabricated and the failure was loud — but the taxonomy could be
+  sharper. Phase 2's file, so it goes here rather than into a Phase 4 diff.
+
+- **`persona_classified` is computed on every session end and rendered nowhere.** The end route
+  derives it from the event log and writes it to the row; the report does not show it. Adding it is
+  one field read, but persona display is not in Phase 4's scope (transcript, emotion timeline,
+  competence radar) and it would want its own explanation of what the five personas mean.
+
+- **The report has no way to retry a failed score from the page.** Deliberate: the page is public
+  and a retry button there would put a paid model call behind an unauthenticated URL. The session's
+  own browser can still POST `/score`, which is cookie-gated, but nothing in the UI calls it. If
+  failed scores turn out to be common in practice, the retry belongs on the summary screen where
+  the cookie is, not on the report.
+
+- **`npm run typecheck` cannot pass on a clean checkout, and the v2 CI job has never run.**
+  `src/app/layout.tsx:16` uses `LayoutProps<"/">`, a global that only exists after `next typegen`
+  has written `.next/types`, and `.next/` is gitignored. CI's `checks` job runs `npm ci` and then
+  `npm run typecheck` *before* `npm run build`, so it would fail there on a Phase-0 line. It has
+  not surfaced yet only because `v2-rebuild` is unpushed and `.github/workflows/v2.yml` has
+  therefore never executed — `gh run list` shows nothing but v1's April runs.
+
+  Phase 4's report page deliberately does NOT add to this: it declares
+  `{ params: Promise<{ sessionId: string }> }` by hand, the way all six existing route handlers
+  already do, rather than using the generated `PageProps`. Verified by deleting `.next/` and
+  running typecheck — `layout.tsx` is the only remaining error.
+
+  The fix is one line, `"pretypecheck": "next typegen"` in `v2/package.json`, matching the
+  `predev`/`prebuild` scripts already there. Left undone because package-level config is not
+  something to change unilaterally mid-phase, and because it must be verified against an actual CI
+  run rather than locally. Do it before the first push.
+
+- **iPad is still inferred, not measured.** Unchanged from Phase 3. Phase 4 added a server-rendered
+  report page with no client JavaScript of its own, so it changes nothing about the tablet story.
