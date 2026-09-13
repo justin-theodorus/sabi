@@ -51,7 +51,14 @@ export default function Page() {
   }
 
   if (state.phase === 'over') {
-    return <Summary hearts={state.hearts} turnIndex={state.turnIndex} endReason={state.endReason} />
+    return (
+      <Summary
+        hearts={state.hearts}
+        turnIndex={state.turnIndex}
+        endReason={state.endReason}
+        sessionId={state.sessionId}
+      />
+    )
   }
 
   const busy = state.phase !== 'idle'
@@ -243,32 +250,51 @@ function Lobby({
   )
 }
 
+const HEADLINES: Record<string, string> = {
+  hearts_exhausted: 'Out of hearts',
+  farewell: 'Order complete',
+  // Finding S11: a session that ran to the cap did not finish, and until Phase 4 it said it did.
+  turn_cap: 'That is all the time uncle has',
+  manual: 'Session ended',
+}
+
 function Summary({
   hearts,
   turnIndex,
   endReason,
+  sessionId,
 }: {
   hearts: number
   turnIndex: number
   endReason: string | null
+  sessionId: string | null
 }) {
-  const headline =
-    endReason === 'hearts_exhausted'
-      ? 'Out of hearts'
-      : endReason === 'farewell'
-        ? 'Order complete'
-        : 'Session ended'
-
   return (
     <main style={{ ...screenStyle, textAlign: 'center' }}>
-      <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>{headline}</h1>
+      <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>
+        {(endReason && HEADLINES[endReason]) ?? 'Session ended'}
+      </h1>
       <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: 'var(--text-secondary)' }}>
         {turnIndex} {turnIndex === 1 ? 'turn' : 'turns'} &middot; {hearts} hearts left
       </p>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>
-        The session report arrives in a later phase.
-      </p>
-      <button onClick={() => window.location.reload()} style={primaryButtonStyle}>
+
+      {/* The report is a public link with no sign-in, which is the demo's whole shape: one
+          uninterrupted flow shows both halves of the product. Scoring was already scheduled by
+          the end route, so it is usually ready by the time this is clicked. */}
+      {sessionId ? (
+        <a href={`/report/${sessionId}`} style={{ ...primaryButtonStyle, textDecoration: 'none' }}>
+          See the session report
+        </a>
+      ) : null}
+
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          ...primaryButtonStyle,
+          background: 'var(--surface-sub)',
+          color: 'var(--text-primary)',
+        }}
+      >
         Start again
       </button>
     </main>
