@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 
 import AACBoard from '@/components/AACBoard'
+import CameraBadge from '@/components/CameraBadge'
 import ScenarioStage from '@/components/ScenarioStage'
 import SentenceBar from '@/components/SentenceBar'
 import SessionHud from '@/components/SessionHud'
+import { useExpressionSampler } from '@/lib/expression/use-expression-sampler'
 import { DEFAULT_PERSONA } from '@/lib/persona/classify'
 import type { ModeId } from '@/lib/prompt/types'
 import { HAWKER_CENTRE } from '@/lib/scenario/hawker-centre'
@@ -31,6 +33,11 @@ export default function Page() {
     const id = setInterval(() => setNow(Date.now()), COUNTDOWN_REFRESH_MS)
     return () => clearInterval(id)
   }, [])
+
+  // The camera opens only for the life of a session, and getUserMedia is reached from the Start
+  // button's own render pass, which is the user gesture iOS Safari requires.
+  const inSession = state.phase !== 'lobby' && state.phase !== 'over'
+  const { videoRef, status: cameraStatus } = useExpressionSampler({ active: inSession, dispatch })
 
   if (state.phase === 'lobby') {
     return (
@@ -59,6 +66,39 @@ export default function Page() {
         secondsLeft={computeSecondsLeft(state, now)}
         onEnd={() => dispatch({ type: 'END_REQUESTED', reason: 'manual' })}
       />
+
+      {/* Not display:none. iOS Safari stops decoding a hidden video, and a stopped video yields no
+          frames to sample. Offscreen and transparent keeps it playing without showing the learner
+          their own face, which v1's UI also chose (session/page.tsx:699). */}
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        autoPlay
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          padding: '3px 14px',
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <CameraBadge status={cameraStatus} />
+      </div>
 
       <ScenarioStage
         scenario={HAWKER_CENTRE}
