@@ -5,6 +5,7 @@ import {
   MAX_HEARTS,
   type EndReason,
   type EventType,
+  type ScoringState,
   type SessionEventRow,
   type SessionRow,
 } from '@/lib/session/types'
@@ -28,6 +29,8 @@ const toSession = (row: any): SessionRow => ({
   endedAt: row.ended_at === null ? null : new Date(row.ended_at),
   competenceScores: row.competence_scores ?? null,
   scoredAt: row.scored_at === null || row.scored_at === undefined ? null : new Date(row.scored_at),
+  scoringState: (row.scoring_state ?? 'pending') as ScoringState,
+  scoringError: row.scoring_error ?? null,
 })
 
 const toEvent = (row: any): SessionEventRow => ({
@@ -105,14 +108,19 @@ export async function appendEvent(
  * Commits a completed turn: the learner's selection, the NPC's reply, and the turn counter, in
  * one transaction. v1 wrote its two events from the browser as unawaited fire-and-forget calls
  * (session/page.tsx:530, :581) and kept turn_index only in React state.
+ *
+ * It deliberately does NOT end the session, even when the turn it is committing is the last one.
+ * Until Phase 4 it set status/end_reason/ended_at here as well, which made two writers own
+ * termination and left them disagreeing: the client's subsequent POST /end hit requireSession()
+ * on an already-completed session and got a silent 409, so on the farewell path — the normal
+ * success path — the session_end event was never appended, the persona metrics were never
+ * computed and persona_classified was never written. /end is now the only writer of termination.
  */
 export async function commitTurn(args: {
   readonly sessionId: string
   readonly iconSelection: Record<string, unknown> | null
   readonly npcResponse: Record<string, unknown>
   readonly hearts: number
-  readonly status: 'active' | 'completed'
-  readonly endReason: EndReason | null
 }): Promise<{ turnIndex: number; seq: number }> {
   const sql = db()
   const { sessionId } = args
@@ -135,9 +143,6 @@ export async function commitTurn(args: {
       update sessions
          set turn_index   = turn_index + 1,
              hearts       = ${args.hearts},
-             status       = ${args.status},
-             end_reason   = ${args.endReason},
-             ended_at     = ${args.status === 'completed' ? new Date().toISOString() : null},
              last_seen_at = now()
        where id = ${sessionId}
        returning turn_index
@@ -210,17 +215,46 @@ export async function loseHeart(sessionId: string): Promise<number | null> {
  * Records a score. Written by the route that produced it, never by the client the way v1's
  * therapist page did (therapist/sessions/[sessionId]/page.tsx:233).
  *
- * The payload and the timestamp are set together, which the 0002 check constraint enforces, so a
- * scored session and an unscored one are always distinguishable.
+ * The payload, the timestamp and the state are set together, which the 0002 and 0003 check
+ * constraints enforce, so a scored session and an unscored one are always distinguishable.
+ *
+ * `and competence_scores is null` closes the last-write-wins race the route's read-through
+ * idempotency check leaves open: two callers can both observe an unscored session and both call
+ * the model, and without this the second silently overwrites a clinical record the first wrote.
+ * Returns whether this call was the one that wrote.
  */
 export async function saveCompetenceScores(
   sessionId: string,
   scores: Record<string, unknown>,
+): Promise<boolean> {
+  const rows = await db()`
+    update sessions
+       set competence_scores = ${JSON.stringify(scores)}::jsonb,
+           scored_at         = now(),
+           scoring_state     = 'scored',
+           scoring_error     = null
+     where id = ${sessionId}
+       and competence_scores is null
+     returning id
+  `
+  return rows.length > 0
+}
+
+/**
+ * Moves a session between the non-scored states. 'scored' is deliberately not reachable from here:
+ * that transition belongs to saveCompetenceScores, which sets the payload in the same statement,
+ * so the state and the score cannot drift apart.
+ */
+export async function setScoringState(
+  sessionId: string,
+  state: Exclude<ScoringState, 'scored'>,
+  error: string | null = null,
 ): Promise<void> {
   await db()`
     update sessions
-       set competence_scores = ${JSON.stringify(scores)}::jsonb,
-           scored_at         = now()
+       set scoring_state = ${state},
+           scoring_error = ${error}
      where id = ${sessionId}
+       and competence_scores is null
   `
 }

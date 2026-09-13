@@ -124,8 +124,6 @@ export async function POST(request: Request) {
           learnerExpression,
         },
         hearts: session.hearts,
-        status: sessionComplete ? 'completed' : 'active',
-        endReason: sessionComplete ? 'farewell' : null,
       })
 
       return {
