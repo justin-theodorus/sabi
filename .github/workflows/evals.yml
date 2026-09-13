@@ -1,0 +1,38 @@
+# The scoring eval set. Manual only, because every run makes real model calls.
+#
+# 10 fixtures x 3 runs on Haiku, comfortably under a cent, but "comfortably under a cent" on every
+# push to every branch is how a demo project acquires a bill. The rebuild plan is explicit that
+# evals run on demand, not per-commit.
+
+name: evals
+
+on:
+  workflow_dispatch:
+
+jobs:
+  score:
+    name: score the eval fixtures
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: v2/package-lock.json
+
+      - run: npm ci
+
+      - name: run evals
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        run: npx tsx evals/run.ts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: v2/evals/results/

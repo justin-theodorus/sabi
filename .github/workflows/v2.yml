@@ -1,0 +1,67 @@
+# CI for the v2 rebuild.
+#
+# Separate from ci.yml on purpose. That workflow is v1's, it is frozen along with the services it
+# builds, and it triggers only on main/justin so the two never collide.
+#
+# v1 had no test job at all: its four jobs type-checked the frontend, ran ruff over three
+# hardcoded file paths, built six images, and curled /health with ANTHROPIC_API_KEY=stub, which
+# means no model code path was exercised anywhere in CI. Everything here runs offline against
+# mock providers; the evals, which cost money, are in evals.yml on workflow_dispatch.
+
+name: v2
+
+on:
+  push:
+    paths:
+      - 'v2/**'
+      - '.github/workflows/v2.yml'
+  pull_request:
+    paths:
+      - 'v2/**'
+      - '.github/workflows/v2.yml'
+
+jobs:
+  checks:
+    name: typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: v2/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  v1-frozen:
+    name: v1 is unmodified
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The rebuild's one hard constraint, as a gate rather than a promise. v1 is the largest body
+      # of uncontested solo work in the repo and a deliberate interview artifact; the rebuild is
+      # additive or it is nothing.
+      - name: no v1 file has changed since main
+        run: |
+          git fetch origin main --depth=0
+          CHANGED=$(git diff --name-only origin/main...HEAD -- \
+            aac-icon-service/ dialogue-engine/ dialogue-queue/ expression-service/ \
+            frontend/ k8s/ kong/ persona-engine/ session-service/ tests/ scripts/ \
+            docker-compose.yml dev.sh)
+          if [ -n "$CHANGED" ]; then
+            echo "v1 files modified:"
+            echo "$CHANGED"
+            exit 1
+          fi
+          echo "v1 is untouched."
