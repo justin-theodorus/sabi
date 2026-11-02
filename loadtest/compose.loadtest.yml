@@ -1,0 +1,19 @@
+# Overlay that makes a v1 load test measure something. Opt in explicitly:
+#   docker compose -f docker-compose.yml -f loadtest/compose.loadtest.yml up -d ...
+#
+# Deliberately NOT named docker-compose.override.yml: that name is auto-loaded by
+# every bare `docker compose up` and by dev.sh, which would make v1 look fixed to
+# anyone running the repo normally. v1 is frozen and should keep reporting its real
+# behaviour on the default path.
+services:
+  dialogue-queue-api:
+    volumes:
+      - ./loadtest/patches/dialogue-queue-index.js:/app/index.js:ro
+
+  expression-service:
+    build:
+      context: ./loadtest
+      dockerfile: expression.Dockerfile
+    image: sabi-expression-service-loadtest:latest
+    volumes:
+      - ./loadtest/patches/expression-main.py:/app/main.py:ro
