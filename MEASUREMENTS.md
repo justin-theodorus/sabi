@@ -265,6 +265,9 @@ lesson as a design rule instead: `bench/assert.ts` has no defaults and no option
 fallbacks, every field it reads is asserted, and every failure names what it found instead. A shape
 it does not recognise stops the run rather than quietly becoming a fiction.
 
+The patched copy under `loadtest/` reads `text` and fails the request when it is missing, which is
+how §9.4's translate leg came to measure the string it actually sends.
+
 ---
 
 ## 8. What is still not measured
@@ -286,3 +289,128 @@ Listed because an unmeasured thing named is worth more than an unmeasured thing 
   so per-session cost for survival is inferred from the per-call numbers rather than observed.
 - **Prompt caching.** Zero cache reads on every call. Untried, and the clearest available lever on
   a workload whose input outweighs its output 27 to 1.
+
+---
+
+## 9. v1's load test, made to measure something
+
+§7 established that the "1 pod saturates at ~15 concurrent sessions" claim was never measured. This
+section is what happened when the load test was made capable of measuring anything at all.
+
+Running `FullSessionUser` as shipped produces a clean report: 102 requests, **0 failures, 5ms
+median**. Every number in it is false. All three legs of the session turn fail silently as HTTP 200,
+and the report cannot distinguish a working service from a dead one. Three separate defects
+combine to produce that result.
+
+### 9.1 The relay never returned anything to the client
+
+`dialogue-queue/index.js:56` registers `req.on('close', cleanup)`. On Node 16+ (the container runs
+v18.20.8) `IncomingMessage` emits `close` as soon as its body stream is consumed, and
+`express.json()` consumes it before the handler body runs. `cleanup()` therefore unsubscribed from
+the Redis channel and called `res.end()` before the job was even enqueued.
+
+An in-container probe, rather than inference from the source:
+
+```
+REQ close fired at +3ms  writableEnded=false
+event: late                      <- a write 300ms later still arrived, so the client had NOT gone
+RES close fired at +309ms
+```
+
+The client had not disconnected. The handler only believed it had. The worker then performed the
+full Claude call and published to a channel with no subscriber: **36 real Claude calls were made
+and paid for during that run, and no client received one of them.** The load test reported the leg
+as a 3ms success with an average content length of 0 bytes, and 0 bytes was never treated as
+failure.
+
+`dialogue-engine` itself was never at fault. Called directly it streams correctly.
+
+### 9.2 DeepFace had never run, in any session, ever
+
+`expression-service` logged this at every startup and continued:
+
+```
+Warmup error (non-fatal): ('Confirm that opencv is installed on your environment!
+Expected path ', '.../cv2/data/haarcascade_frontalface_default.xml', ' violated.')
+```
+
+`expression-service/requirements.txt` pins nothing, and the Dockerfile ends with an unpinned
+`--force-reinstall opencv-python-headless`, so the build resolved to **opencv 5.0.0.93**, whose
+`cv2/data/` contains only `__init__.py`. The haarcascade the `opencv` detector backend looks for
+does not exist in that release. `/root/.deepface/weights/` was empty: the emotion model was never
+downloaded, because warmup raised before it got that far.
+
+Every `/analyze-frame` call therefore threw, and `main.py:88-93` caught it and returned
+`neutral: 100.0` with every other label at `0.0`, over HTTP 200, in ~95ms. That response was the
+exception path. **The ~95ms figure is the cost of constructing a fallback, not of inference**, and
+no emotion was ever inferred by the server in v1's life.
+
+This also retires the `k8s/expression-service.yaml:57` claim by a shorter route than §7 took. A pod
+cannot saturate on inference it is not performing.
+
+### 9.3 Both handlers returned HTTP 200 on total failure
+
+The property that makes the other two unfalsifiable. A harness that cannot separate working from
+broken measures neither, and under load this is the worst available behaviour: the report gets
+greener as the system gets deader, because failing fast is cheaper than succeeding.
+
+The locustfile has the same defect on the client side. `FullSessionTasks` called `resp.success()`
+whenever `resp.ok`, without ever checking that `full_text` was non-empty.
+
+### 9.4 What it measures once the three are fixed
+
+v1 is frozen, so none of this is fixed in place. `loadtest/` holds patched copies outside the gated
+tree and a compose overlay that mounts them, deliberately not named `docker-compose.override.yml`
+so that the default path keeps reporting v1's real behaviour. See `loadtest/README.md`.
+
+With the relay fixed, opencv pinned to 4.10.0.84, the weights baked in, failures returning 5xx, and
+the locustfile asserting all three legs, the same `FullSessionUser` scenario at 5 users for 120s
+through Kong:
+
+| leg | p50 | p95 | n | fails |
+|---|---|---|---|---|
+| `/analyze-frame` (real DeepFace inference) | **19ms** | 110ms | 122 | 0 |
+| `/translate` | **2ms** | 18ms | 122 | 0 |
+| `/dialogue/stream` full drain to `full_text` | **870ms** | 1300ms | 121 | 0 |
+
+0 failures here means the streams arrived, the emotion scores were real distributions rather than
+the neutral fallback, and `full_text` was non-empty on all 121 turns. The previous 0 meant nothing.
+
+Two notes on the numbers. Real inference at 19ms p50 is **five times faster than the 95ms fallback**
+it replaced, so the one performance figure v1 could produce was also its slowest path. And locust
+records a `stream=True` response time at headers received, which for this leg is the enqueue cost
+(4ms), not the turn: the 870ms above is a separately fired drain metric, because the shipped harness
+would have reported this leg as 4ms even after the relay was fixed.
+
+### 9.5 The actual saturation ceiling
+
+Kong applies `minute: 120, limit_by: ip` to `/dialogue` and `/analyze-frame`
+(`kong/kong.yml:22-28`, `:68-74`). Locust runs from one IP, so the docstring's 20 users measures
+Kong's limiter rather than SABI. These runs go directly to the queue API to avoid that.
+
+| users | dialogue p50 | p95 | throughput |
+|---|---|---|---|
+| 5 (via Kong) | 870ms | 1300ms | 1.01 req/s |
+| 12 | 2300ms | 3300ms | **1.98 req/s** |
+| 24 | 7600ms | 8500ms | **2.15 req/s** |
+
+Throughput pins at roughly **2 requests per second** and stays there while latency inflates 8.7x.
+That ceiling is `WORKER_CONCURRENCY=2` on a single worker replica, and it is not a coincidence of
+this hardware: it is two concurrent Claude calls at a service time near 1s. Users beyond that buy
+queue depth, not throughput.
+
+So the real answer to the frozen "~15 concurrent sessions" claim is that **the binding constraint
+was never the expression pod at all.** It is a two-slot worker in front of an upstream API, and it
+binds at a concurrency the original claim never considered.
+
+### 9.6 What this section does not measure
+
+- **Real faces.** The locust frame is synthetic noise, so the classifier runs and returns a genuine
+  distribution over a meaningless input. Detection was verified separately: the cascade loads
+  (`empty: False`) and `detectMultiScale` executes. Accuracy on real webcam input is untested.
+- **ElevenLabs.** The key on this account is a free-plan key returning 402, which trips
+  `_elevenlabs_disabled` on first call. TTS is absent from every figure above, so the "full
+  production path" the test's docstring claims to exercise has never included it.
+- **`session-service` and `persona-engine`.** No locust class touches either, so both are excluded
+  from the stack these runs used. Supabase is therefore irrelevant to this entire section.
+- **Sustained load.** The longest run here is 120s.
