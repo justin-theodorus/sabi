@@ -386,8 +386,9 @@ Carried in [BACKLOG.md](BACKLOG.md) rather than decided here.
 - **A session abandoned between the last turn and the end POST stays `active` forever.** The
   `abandoned` status exists in the schema and nothing sets it. v1 had the same gap and had built the
   detector it never consumed (`session:{id}:alive`). A reaper is a background job.
-- **Prompt caching is untried**, and it is the clearest available lever: zero cache reads on all 42
-  measured calls, with input outweighing output roughly 27 to 1.
+- **Prompt caching is unavailable on this model at this prompt size.** Haiku 4.5 caches only
+  prefixes of 4,096 tokens or more, and the prompt averages 1152 (`MEASUREMENTS.md` §3). The zero
+  cache reads on all 42 calls are that minimum, not a missed optimisation.
 - **An unknown model id classifies as `stream_failed` rather than `provider_rejected`**, because
   `fromStatus` has no 404 case. Harmless, nothing is fabricated, but the report tells a reader
   "stream failed" for what is really a configuration error.

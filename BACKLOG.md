@@ -441,10 +441,11 @@ refer to `sabi-rebuild-plan.md`; finding ids (`2.9`, `S5`, `3.1`) refer to `sabi
 
 ## Surfaced by Phase 5, deferred on purpose
 
-- **Prompt caching is untried, and it is the obvious lever.** `cache_read_tokens` and
-  `cache_write_tokens` were zero on all 42 measured calls. Input outweighs output roughly 27 to 1
-  (mean 1152 in, 43 out) because the system prompt, the scenario and up to twelve turns of history
-  are re-sent every turn. Nothing in this phase's scope, but it is where the cost is.
+- **Prompt caching cannot apply on Haiku 4.5.** Input outweighs output roughly 27 to 1 (mean 1152
+  in, 43 out) because the system prompt, the scenario and up to twelve turns of history are re-sent
+  every turn, but Haiku 4.5's minimum cacheable prefix is 4,096 tokens, so a `cache_control` marker
+  would be silently ignored. The cost lever here is the model, not the cache: a model with a lower
+  minimum would make caching possible, and that decision goes through the eval suite first.
 
 - **Every latency figure carries ~300ms of Pacific.** Functions run in `iad1` and the measurements
   were taken from Singapore. `POST /api/translate`, pure function, no I/O, no model, measures the

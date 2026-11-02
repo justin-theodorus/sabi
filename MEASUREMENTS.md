@@ -152,8 +152,12 @@ are stored as `numeric(12,8)` and summed in Postgres, never as floats in JavaScr
 
 **Input dominates output roughly 27 to 1.** The system prompt, the scenario, and up to twelve
 turns of history are re-sent on every turn; the reply is capped at 256 tokens and averages 43.
-Nothing here is currently cached. `cache_read_tokens` and `cache_write_tokens` were zero on every
-call, so prompt caching is the obvious lever, and it is untouched.
+Nothing here is cached, and on this model nothing can be. `cache_read_tokens` and
+`cache_write_tokens` were zero on every call because Haiku 4.5 will not cache a prefix shorter than
+4,096 tokens, and the whole prompt averages 1152. Even a 12-turn session, the cap, stays well under
+it. Below the minimum a `cache_control` marker is accepted and silently ignored, so adding one would
+have changed no number in this file. An earlier draft called caching "the obvious lever"; it is not
+a lever at all at this prompt size on this model.
 
 ---
 
@@ -287,8 +291,9 @@ Listed because an unmeasured thing named is worth more than an unmeasured thing 
 - **A real webcam.** §4's video source is a canvas stream.
 - **Survival mode cost.** The `/judge` call is instrumented but no survival session is in this run,
   so per-session cost for survival is inferred from the per-call numbers rather than observed.
-- **Prompt caching.** Zero cache reads on every call. Untried, and the clearest available lever on
-  a workload whose input outweighs its output 27 to 1.
+- **Prompt caching does not apply.** Not unmeasured but inapplicable: Haiku 4.5's minimum
+  cacheable prefix is 4,096 tokens and the prompt is ~1,150 (§3). It only becomes available with a
+  model whose minimum is lower, which is a model change and needs the eval suite rerun first.
 
 ---
 
