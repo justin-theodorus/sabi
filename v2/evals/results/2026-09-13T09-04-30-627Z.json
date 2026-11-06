@@ -1,0 +1,526 @@
+{
+  "report": {
+    "startedAt": "2026-09-13T09:04:30.624Z",
+    "model": "claude-sonnet-5 via anthropic",
+    "passed": true,
+    "checks": [
+      {
+        "name": "every fixture scored",
+        "passed": true,
+        "detail": "10/10 fixtures returned valid scores"
+      },
+      {
+        "name": "all scores within 0-100",
+        "passed": true,
+        "detail": "all in range"
+      },
+      {
+        "name": "strong scores above mixed",
+        "passed": true,
+        "detail": "strong 72.8 vs mixed 56.9 (need +8)"
+      },
+      {
+        "name": "mixed scores above weak",
+        "passed": true,
+        "detail": "mixed 56.9 vs weak 23.1 (need +8)"
+      },
+      {
+        "name": "mixed-01: social above strategic",
+        "passed": true,
+        "detail": "social 71.0 vs strategic 17.0"
+      },
+      {
+        "name": "mixed-02: operational above confidence",
+        "passed": true,
+        "detail": "operational 71.3 vs confidence 50.0"
+      },
+      {
+        "name": "strong-03: social above linguistic",
+        "passed": true,
+        "detail": "social 87.7 vs linguistic 54.0"
+      },
+      {
+        "name": "strong-03: confidence above linguistic",
+        "passed": true,
+        "detail": "confidence 79.3 vs linguistic 54.0"
+      },
+      {
+        "name": "strong-04: linguistic above social",
+        "passed": true,
+        "detail": "linguistic 66.0 vs social 27.7"
+      },
+      {
+        "name": "strong-04: operational above social",
+        "passed": true,
+        "detail": "operational 80.7 vs social 27.7"
+      },
+      {
+        "name": "weak-02: operational above strategic",
+        "passed": true,
+        "detail": "operational 29.3 vs strategic 17.3"
+      },
+      {
+        "name": "mixed-01: strategic is observed",
+        "passed": true,
+        "detail": "scored in all 3 runs (mean 17.0)"
+      },
+      {
+        "name": "strong-03: strategic is not observed",
+        "passed": true,
+        "detail": "all 3 runs declined it, as they should — nothing broke"
+      },
+      {
+        "name": "weak-02: strategic is observed",
+        "passed": true,
+        "detail": "scored in all 3 runs (mean 17.3)"
+      },
+      {
+        "name": "mixed-01: stable across runs",
+        "passed": true,
+        "detail": "sd 0.7 (max 12)"
+      },
+      {
+        "name": "mixed-02: stable across runs",
+        "passed": true,
+        "detail": "sd 0.8 (max 12)"
+      },
+      {
+        "name": "mixed-03: stable across runs",
+        "passed": true,
+        "detail": "sd 2.0 (max 12)"
+      },
+      {
+        "name": "strong-01: stable across runs",
+        "passed": true,
+        "detail": "sd 0.8 (max 12)"
+      },
+      {
+        "name": "strong-02: stable across runs",
+        "passed": true,
+        "detail": "sd 1.4 (max 12)"
+      },
+      {
+        "name": "strong-03: stable across runs",
+        "passed": true,
+        "detail": "sd 0.7 (max 12)"
+      },
+      {
+        "name": "strong-04: stable across runs",
+        "passed": true,
+        "detail": "sd 4.6 (max 12)"
+      },
+      {
+        "name": "weak-01: stable across runs",
+        "passed": true,
+        "detail": "sd 0.9 (max 12)"
+      },
+      {
+        "name": "weak-02: stable across runs",
+        "passed": true,
+        "detail": "sd 0.5 (max 12)"
+      },
+      {
+        "name": "weak-03: stable across runs",
+        "passed": true,
+        "detail": "sd 2.2 (max 12)"
+      },
+      {
+        "name": "scorer uses the range",
+        "passed": true,
+        "detail": "observed spread 80 across all dimensions (need 20)"
+      }
+    ]
+  },
+  "results": [
+    {
+      "fixtureId": "mixed-01",
+      "tier": "mixed",
+      "runs": [
+        {
+          "scores": {
+            "operational": 60,
+            "linguistic": 32,
+            "social": 70,
+            "strategic": 18,
+            "confidence": 55
+          },
+          "overall": 47,
+          "summary": "Learner reliably combined 2-icon messages appropriate to the scenario (hello+uncle, I want+mee, okay+thank you) and maintained polite turn-taking, but when the NPC repeatedly signaled confusion about which type of mee, the learner repeated the identical message three times instead of adding a specifying icon or rephrasing, indicating an emerging vocabulary range and an absent repair strategy in this instance."
+        },
+        {
+          "scores": {
+            "operational": 58,
+            "linguistic": 38,
+            "social": 68,
+            "strategic": 18,
+            "confidence": 45
+          },
+          "overall": 45.4,
+          "summary": "The learner used simple, appropriate 2-icon combinations (greeting, request, thanks) but showed no vocabulary growth or repair strategy when the NPC repeatedly signaled confusion about the type of mee — the same 'I want + mee' message was repeated three times verbatim instead of being modified with more specific icons. Social politeness markers (hello, thank you) were used appropriately, but the lack of adaptation under communication breakdown suggests a real gap in repair strategies that a therapist should target directly."
+        },
+        {
+          "scores": {
+            "operational": 60,
+            "linguistic": 35,
+            "social": 75,
+            "strategic": 15,
+            "confidence": 45
+          },
+          "overall": 46,
+          "summary": "The learner used clear, socially appropriate two-icon messages (greeting, request, closing) but when the NPC signaled confusion three times in a row, the learner simply repeated the identical 'I want + mee' icons rather than adding a specifying icon (e.g., fish ball, chicken), so the breakdown was never repaired. Vocabulary and message complexity stayed minimal throughout, though turn-taking and politeness markers were solid."
+        }
+      ]
+    },
+    {
+      "fixtureId": "mixed-02",
+      "tier": "mixed",
+      "runs": [
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 58,
+            "social": 82,
+            "strategic": 38,
+            "confidence": 52
+          },
+          "overall": 61.6,
+          "summary": "The learner reliably selected icons that matched their intent (greeting, request, size, politeness, closing) and used appropriate social markers like 'please' and 'thank you'. However, two timeouts required external prompting before the learner produced 'small please' and the initial order, suggesting hesitancy and reliance on cues rather than independent repair; message length stayed at 1-2 icons throughout with no attempt at self-initiated rephrasing when prompts were needed."
+        },
+        {
+          "scores": {
+            "operational": 68,
+            "linguistic": 55,
+            "social": 78,
+            "strategic": null,
+            "confidence": 48
+          },
+          "overall": 62.25,
+          "summary": "Learner selected appropriate icons for each stage of the ordering exchange (want+item, size+please, no, thank you) and maintained polite, socially fitting turn-taking, but needed external prompting twice before responding, suggesting reduced initiative or slower processing under time pressure. No NPC confusion or breakdown occurred, so strategic repair could not be assessed. Vocabulary and message length stayed short and formulaic throughout."
+        },
+        {
+          "scores": {
+            "operational": 68,
+            "linguistic": 45,
+            "social": 78,
+            "strategic": null,
+            "confidence": 50
+          },
+          "overall": 60.25,
+          "summary": "The learner selected icons that accurately matched each conversational turn (greeting, ordering, specifying size, declining a drink, thanking), showing solid operational mapping of intent to icons, though vocabulary stayed at the single- or two-icon level with no attempt at more complex combinations. Two response timeouts suggest inconsistent initiative/confidence, but since the NPC never signaled confusion or misunderstanding, there was no genuine breakdown to assess repair strategies."
+        }
+      ]
+    },
+    {
+      "fixtureId": "mixed-03",
+      "tier": "mixed",
+      "runs": [
+        {
+          "scores": {
+            "operational": 72,
+            "linguistic": 45,
+            "social": 82,
+            "strategic": 58,
+            "confidence": 70
+          },
+          "overall": 65.4,
+          "summary": "Learner used short, appropriate icon combinations (greeting, want+rice, yes, okay+thank you) that matched intent and kept the interaction moving smoothly. When the NPC signaled confusion about the type of rice, the learner resolved it with a simple 'yes' confirmation rather than an elaborated rephrase, showing a basic but functional repair strategy; vocabulary and message length remain limited, suggesting room to build more varied multi-icon utterances."
+        },
+        {
+          "scores": {
+            "operational": 70,
+            "linguistic": 38,
+            "social": 78,
+            "strategic": 55,
+            "confidence": 62
+          },
+          "overall": 60.6,
+          "summary": "Learner selected icons that matched intent and successfully completed a simple ordering exchange, including confirming the NPC's clarification ('yes' after 'chicken rice ah?'), though this was a passive confirmation rather than an active rephrase. Vocabulary and message length were minimal (1-2 icons per turn), limiting linguistic range, while social turn-taking and politeness (hello, thank you) were solid throughout."
+        },
+        {
+          "scores": {
+            "operational": 75,
+            "linguistic": 42,
+            "social": 78,
+            "strategic": 55,
+            "confidence": 68
+          },
+          "overall": 63.6,
+          "summary": "Learner used clear, appropriately combined icons (greeting, request+item, confirmation, closing) matching intent well, though vocabulary stayed at single/two-word level throughout. When the NPC signaled confusion about the rice order, the learner resolved it with a simple 'yes' confirmation rather than an active rephrase, showing only minimal repair capability. Overall the session shows a consistent, socially appropriate transaction with room to grow in vocabulary range and proactive repair strategies."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-01",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 80,
+            "linguistic": 68,
+            "social": 85,
+            "strategic": 78,
+            "confidence": 75
+          },
+          "overall": 77.2,
+          "summary": "Learner combined 2-3 icons per turn appropriately and maintained social conventions (greeting, please, thank you) throughout. When the NPC misunderstood the drumstick quantity, the learner successfully repaired with 'no + one + drumstick', showing an emerging but effective repair strategy."
+        },
+        {
+          "scores": {
+            "operational": 82,
+            "linguistic": 62,
+            "social": 85,
+            "strategic": 80,
+            "confidence": 75
+          },
+          "overall": 76.8,
+          "summary": "Learner used clear, well-matched icon sequences (greeting, request+please, thank you) and successfully repaired a breakdown when the NPC misunderstood the drumstick order, quickly clarifying with 'no + one + drumstick.' Vocabulary and message length remain basic (2-3 icons), but social politeness markers and turn-taking were consistently appropriate throughout the exchange."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 68,
+            "social": 85,
+            "strategic": 75,
+            "confidence": 80
+          },
+          "overall": 78.6,
+          "summary": "Learner used clear, well-matched icon combinations throughout (greetings, requests, quantities, politeness) and successfully repaired a misunderstanding about drumstick quantity with a concise clarifying message. Vocabulary and message length remain simple but functional; continued practice could expand grammatical complexity and clarify quantity from the outset."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-02",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 65,
+            "social": 88,
+            "strategic": 80,
+            "confidence": 78
+          },
+          "overall": 79.2,
+          "summary": "The learner reliably combined icons into clear, intent-matching requests and used polite forms (please, thank you) appropriately across all turns. When faced with two breakdowns (noodle type ambiguity, fish ball sold out), they successfully repaired by asking a clarifying question and adjusting their order, showing solid strategic and social competence; vocabulary and message length remain simple/telegraphic, suggesting room to build more complex linguistic structures."
+        },
+        {
+          "scores": {
+            "operational": 82,
+            "linguistic": 58,
+            "social": 83,
+            "strategic": 78,
+            "confidence": 80
+          },
+          "overall": 76.2,
+          "summary": "Learner selected icon combinations that closely matched intent throughout (e.g., 'chicken + noodle + can', 'no + spicy + please') and maintained polite, socially appropriate turn-taking including greeting and thanking. When the first two food requests failed (confusion, then sold-out), the learner recovered well by asking 'what you have' and pivoting to an available option, showing solid repair strategy, though overall vocabulary stayed at a basic 2-3 icon phrase level without more complex structures."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 65,
+            "social": 85,
+            "strategic": 80,
+            "confidence": 80
+          },
+          "overall": 79,
+          "summary": "The learner used consistent, well-formed icon combinations that matched intent throughout (greeting, request, politeness markers) and recovered smoothly from two breakdowns (unspecified noodle type, sold-out item) by asking clarifying questions. Vocabulary and message length were simple but functional; social conventions like please/thank-you and turn-taking were well observed, suggesting a communicator who is confident and strategic but still building more complex linguistic structures."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-03",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 55,
+            "social": 90,
+            "strategic": null,
+            "confidence": 80
+          },
+          "overall": 77.5,
+          "summary": "Learner used clear, well-matched icon selections throughout a complete hawker ordering exchange (greeting, order, drink, payment, farewell) with appropriate combining of icons like 'no + thanks'. Vocabulary was limited to short single/dual-icon utterances, but social sequencing and turn-taking were strong and consistent; no breakdowns occurred so repair strategies could not be observed."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 55,
+            "social": 85,
+            "strategic": null,
+            "confidence": 80
+          },
+          "overall": 76.25,
+          "summary": "Learner successfully navigated a full ordering exchange (greeting, order, drink, payment, closing) using well-matched icons with no breakdowns to recover from. Vocabulary and message length were minimal (mostly single icons, one two-icon combination), so linguistic range should be a focus for future sessions."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 52,
+            "social": 88,
+            "strategic": null,
+            "confidence": 78
+          },
+          "overall": 75.75,
+          "summary": "Learner selected icons that matched intent accurately across all turns (greeting, order, drink, payment, closing) and followed the social script of a hawker transaction smoothly with no breakdowns to repair. Vocabulary and message length were minimal (mostly single icons or two-icon combinations), so linguistic complexity was not really demonstrated, but the exchange was fluent and confident throughout."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-04",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 80,
+            "linguistic": 65,
+            "social": 30,
+            "strategic": null,
+            "confidence": 85
+          },
+          "overall": 65,
+          "summary": "Learner reliably selected icons that matched intent and built multi-icon messages independently and quickly, showing strong operational skill and confidence. However, message tone was consistently blunt/demanding (no politeness markers), which escalated the NPC's frustration across turns, indicating a social-pragmatic gap; no comprehension breakdowns occurred so repair strategies could not be observed."
+        },
+        {
+          "scores": {
+            "operational": 82,
+            "linguistic": 68,
+            "social": 28,
+            "strategic": 22,
+            "confidence": 88
+          },
+          "overall": 57.6,
+          "summary": "The learner reliably selected icons that matched intended meaning and kept messages fluent and consistent across all six turns, showing strong operational skill and confidence. However, the NPC's repeated 'mad' reactions signal a social breakdown (perceived as demanding/rude) that the learner never addressed—no softening, acknowledgment, or rephrasing occurred, so social appropriateness and repair strategies are notably weak."
+        },
+        {
+          "scores": {
+            "operational": 80,
+            "linguistic": 65,
+            "social": 25,
+            "strategic": 15,
+            "confidence": 85
+          },
+          "overall": 54,
+          "summary": "Learner reliably selected icons that mapped to clear, complete intents and communicated with fluency and initiative throughout, but never adapted tone or phrasing despite the NPC's escalating annoyance (surprised to mad across turns), showing no repair strategy for the social breakdown they were causing. Vocabulary and message construction were functional but message register (demanding, no softening) was not adjusted for the social context of a hawker stall interaction."
+        }
+      ]
+    },
+    {
+      "fixtureId": "weak-01",
+      "tier": "weak",
+      "runs": [
+        {
+          "scores": {
+            "operational": 28,
+            "linguistic": 18,
+            "social": 25,
+            "strategic": 15,
+            "confidence": 35
+          },
+          "overall": 24.2,
+          "summary": "The learner selected largely off-context single icons (cat, blue) before landing on 'food', but then repeated the identical 'food' icon twice without adding any specifying detail after the NPC signaled confusion, leading to escalating frustration and an NPC-driven guess rather than a resolved order. There is no evidence of rephrasing or alternative icon combinations to repair the breakdown, though the learner did persist across four turns rather than giving up."
+        },
+        {
+          "scores": {
+            "operational": 22,
+            "linguistic": 18,
+            "social": 20,
+            "strategic": 25,
+            "confidence": 35
+          },
+          "overall": 24,
+          "summary": "The learner selected largely off-topic or vague icons (cat, blue, food) and did not refine the message after repeated confusion, resulting in the NPC guessing the order out of frustration rather than genuine communication success. There was some persistence in re-selecting 'food' after breakdowns, but no evidence of rephrasing or adding specificity to repair the misunderstanding."
+        },
+        {
+          "scores": {
+            "operational": 28,
+            "linguistic": 20,
+            "social": 25,
+            "strategic": 22,
+            "confidence": 35
+          },
+          "overall": 26,
+          "summary": "The learner selected off-context icons (cat, blue) before settling on 'food', but never refined the message with a specific food item even after two rounds of NPC confusion, forcing the NPC to guess and resolve the order out of frustration rather than successful communication. There is minimal evidence of repair strategy or vocabulary range; consistent single-icon attempts show some persistence but little adaptation."
+        }
+      ]
+    },
+    {
+      "fixtureId": "weak-02",
+      "tier": "weak",
+      "runs": [
+        {
+          "scores": {
+            "operational": 30,
+            "linguistic": 20,
+            "social": 40,
+            "strategic": 15,
+            "confidence": 35
+          },
+          "overall": 28,
+          "summary": "The learner repeated the identical vague 'I want + thing' message four times despite explicit NPC confusion, never selecting a specific food icon, and ultimately reduced to a single 'thing' icon rather than adding detail. There is no evidence of rephrasing or compensatory strategy; the interaction only resolved because the NPC guessed and supplied chicken rice."
+        },
+        {
+          "scores": {
+            "operational": 30,
+            "linguistic": 20,
+            "social": 35,
+            "strategic": 22,
+            "confidence": 33
+          },
+          "overall": 28,
+          "summary": "Learner consistently selected the same two-icon message ('I want' + 'thing') across four turns despite repeated NPC confusion, never specifying a food item or trying an alternative icon combination. When repair was finally attempted (dropping to just 'thing'), it was a simplification rather than a clarification, and the interaction only resolved because the NPC guessed and offered chicken rice."
+        },
+        {
+          "scores": {
+            "operational": 28,
+            "linguistic": 22,
+            "social": 32,
+            "strategic": 15,
+            "confidence": 38
+          },
+          "overall": 27,
+          "summary": "The learner repeatedly selected the same vague 'I want + thing' combination across four breakdowns without ever adding a specific food icon, and ultimately simplified to a single 'thing' icon rather than repairing the message, so the NPC had to guess. Persistence in re-initiating shows some willingness to keep communicating, but no evidence of adapting vocabulary or strategy to resolve the confusion."
+        }
+      ]
+    },
+    {
+      "fixtureId": "weak-03",
+      "tier": "weak",
+      "runs": [
+        {
+          "scores": {
+            "operational": 20,
+            "linguistic": 15,
+            "social": 15,
+            "strategic": 15,
+            "confidence": 15
+          },
+          "overall": 16,
+          "summary": "The learner repeatedly selected only the 'yes' icon in response to open-ended prompts, never specifying an order (e.g., chicken rice), and did not adapt after the NPC signaled confusion and frustration. Multiple timeouts and a lack of any rephrasing or new icon selection indicate very limited operational, linguistic, social, and strategic competence in this exchange."
+        },
+        {
+          "scores": {
+            "operational": 25,
+            "linguistic": 18,
+            "social": 20,
+            "strategic": 15,
+            "confidence": 22
+          },
+          "overall": 20,
+          "summary": "Learner relied on a single repeated 'yes' icon despite two clear signals of misunderstanding (confusion, then frustration), never expanding vocabulary or selecting a food-specific icon to repair the breakdown. Multiple timeouts before each response suggest slow initiation and low confidence in navigating the board under conversational pressure."
+        },
+        {
+          "scores": {
+            "operational": 20,
+            "linguistic": 15,
+            "social": 15,
+            "strategic": 10,
+            "confidence": 15
+          },
+          "overall": 15,
+          "summary": "Learner repeated the same single 'yes' icon twice despite the NPC explicitly signaling confusion and requesting a specific choice (chicken rice or not); no adaptation or new vocabulary was introduced. There is a clear breakdown (NPC confused, then frustrated) with no evidence of repair or rephrasing, indicating minimal strategic competence and low engagement overall, though timeouts suggest possible disengagement rather than pure skill deficit."
+        }
+      ]
+    }
+  ]
+}

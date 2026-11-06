@@ -1,0 +1,78 @@
+{
+  "id": "weak-03",
+  "tier": "weak",
+  "mode": "survival",
+  "intent": "Barely engages. Both turns are prompted by the uncle after silence, both are one icon, and the session ends on hearts. Confidence should be at the floor.",
+  "expect": {},
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "timeout"
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "yes"
+        ],
+        "translated": "Yes",
+        "turnIndex": 0,
+        "npcInitiated": true
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Yes what? You want to order?",
+        "npcEmotion": "confused",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "timeout"
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "yes"
+        ],
+        "translated": "Yes",
+        "turnIndex": 1,
+        "npcInitiated": true
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "You want chicken rice or not?",
+        "npcEmotion": "mad",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "timeout"
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "hearts_exhausted"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

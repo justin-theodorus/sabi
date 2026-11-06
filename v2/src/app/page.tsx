@@ -1,0 +1,302 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+
+import AACBoard from '@/components/AACBoard'
+import CameraBadge from '@/components/CameraBadge'
+import ScenarioStage from '@/components/ScenarioStage'
+import SentenceBar from '@/components/SentenceBar'
+import SessionHud from '@/components/SessionHud'
+import { useExpressionSampler } from '@/lib/expression/use-expression-sampler'
+import { DEFAULT_PERSONA } from '@/lib/persona/classify'
+import type { ModeId } from '@/lib/prompt/types'
+import { HAWKER_CENTRE } from '@/lib/scenario/hawker-centre'
+import { secondsLeft as computeSecondsLeft } from '@/lib/turn/reducer'
+import { turnErrorMessage } from '@/lib/turn/error-messages'
+import { useTurn } from '@/lib/turn/use-turn'
+
+const COUNTDOWN_REFRESH_MS = 250
+
+export default function Page() {
+  const [mode, setMode] = useState<ModeId>('learning')
+  const [state, dispatch] = useTurn({
+    scenarioId: 'hawker_centre',
+    mode,
+    persona: DEFAULT_PERSONA,
+  })
+
+  // The countdown is derived from lastActivityAt rather than stored, so it needs a render to tick
+  // down. v1 kept a second, independent countdown interval, which meant the ring the learner
+  // watched and the timer that actually took the heart were only coincidentally aligned.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), COUNTDOWN_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  // The camera opens only for the life of a session, and getUserMedia is reached from the Start
+  // button's own render pass, which is the user gesture iOS Safari requires.
+  const inSession = state.phase !== 'lobby' && state.phase !== 'over'
+  const { videoRef, status: cameraStatus } = useExpressionSampler({ active: inSession, dispatch })
+
+  if (state.phase === 'lobby') {
+    return (
+      <Lobby
+        mode={mode}
+        onMode={setMode}
+        error={state.error ? turnErrorMessage(state.error.kind) : null}
+        onStart={() => dispatch({ type: 'START_REQUESTED', now: Date.now() })}
+      />
+    )
+  }
+
+  if (state.phase === 'over') {
+    return (
+      <Summary
+        hearts={state.hearts}
+        turnIndex={state.turnIndex}
+        endReason={state.endReason}
+        sessionId={state.sessionId}
+      />
+    )
+  }
+
+  const busy = state.phase !== 'idle'
+  const lastNpcLine = [...state.transcript].reverse().find((turn) => turn.role === 'npc')?.text ?? ''
+
+  return (
+    <main style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }}>
+      <SessionHud
+        mode={state.config.mode}
+        hearts={state.hearts}
+        turnIndex={state.turnIndex}
+        secondsLeft={computeSecondsLeft(state, now)}
+        onEnd={() => dispatch({ type: 'END_REQUESTED', reason: 'manual' })}
+      />
+
+      {/* Not display:none. iOS Safari stops decoding a hidden video, and a stopped video yields no
+          frames to sample. Offscreen and transparent keeps it playing without showing the learner
+          their own face, which v1's UI also chose (session/page.tsx:699). */}
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        autoPlay
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          padding: '3px 14px',
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <CameraBadge status={cameraStatus} />
+      </div>
+
+      <ScenarioStage
+        scenario={HAWKER_CENTRE}
+        npcEmotion={state.npcEmotion}
+        reply={state.streamingText || lastNpcLine}
+        isStreaming={busy}
+        eventLine={state.activeEventLine}
+      />
+
+      {state.error && state.error.kind !== 'cancelled' ? (
+        <div
+          role="alert"
+          style={{
+            flexShrink: 0,
+            padding: '9px 14px',
+            background: 'var(--pink)',
+            color: '#5c1622',
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {turnErrorMessage(state.error.kind)}
+        </div>
+      ) : null}
+
+      <SentenceBar
+        selected={state.selected}
+        disabled={busy}
+        onRemove={(index) => dispatch({ type: 'ICON_REMOVED', index })}
+        onClear={() => dispatch({ type: 'SELECTION_CLEARED' })}
+        onSubmit={() => dispatch({ type: 'SUBMIT_REQUESTED', now: Date.now() })}
+      />
+
+      <div style={{ flex: '0 0 46%', minHeight: 0 }}>
+        <AACBoard
+          onIconSelect={(icon) => dispatch({ type: 'ICON_SELECTED', icon })}
+          selectedIds={state.selected.map((icon) => icon.id)}
+          scenarioIcons={HAWKER_CENTRE.scenarioIcons.map(({ id, label }) => ({ id, label }))}
+        />
+      </div>
+    </main>
+  )
+}
+
+const screenStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  gap: 16,
+  minHeight: '100dvh',
+  maxWidth: 460,
+  margin: '0 auto',
+  padding: '24px 16px',
+}
+
+const primaryButtonStyle: React.CSSProperties = {
+  padding: '15px 18px',
+  borderRadius: 12,
+  border: 'none',
+  background: 'var(--green)',
+  color: '#fff',
+  fontFamily: 'var(--font)',
+  fontSize: 16,
+  fontWeight: 800,
+  cursor: 'pointer',
+}
+
+function Lobby({
+  mode,
+  onMode,
+  onStart,
+  error,
+}: {
+  mode: ModeId
+  onMode: (mode: ModeId) => void
+  onStart: () => void
+  error: string | null
+}) {
+  return (
+    <main style={screenStyle}>
+      <div>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-.4px' }}>SABI</h1>
+        <p style={{ margin: '6px 0 0', fontSize: 15, fontWeight: 500, color: 'var(--text-secondary)' }}>
+          Practise ordering at a hawker centre using an AAC board. No sign-in.
+        </p>
+      </div>
+
+      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '.4px',
+            color: 'var(--text-muted)',
+            marginBottom: 8,
+          }}
+        >
+          Mode
+        </legend>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['learning', 'survival'] as const).map((option) => (
+            <button
+              key={option}
+              onClick={() => onMode(option)}
+              aria-pressed={mode === option}
+              style={{
+                flex: 1,
+                padding: '13px 12px',
+                borderRadius: 12,
+                border: `2px solid ${mode === option ? 'var(--green)' : 'var(--border)'}`,
+                background: mode === option ? 'var(--green)' : 'var(--surface)',
+                color: mode === option ? '#fff' : 'var(--text-primary)',
+                fontFamily: 'var(--font)',
+                fontSize: 14,
+                fontWeight: 700,
+                textTransform: 'capitalize',
+                cursor: 'pointer',
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <p style={{ margin: '8px 0 0', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+          {mode === 'learning'
+            ? 'The uncle is patient and helps you along.'
+            : 'The uncle behaves like a real person at lunch rush. Five hearts, thirty seconds a turn.'}
+        </p>
+      </fieldset>
+
+      {error ? (
+        <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#c0394a' }}>
+          {error}
+        </p>
+      ) : null}
+
+      <button onClick={onStart} style={primaryButtonStyle}>
+        Start
+      </button>
+    </main>
+  )
+}
+
+const HEADLINES: Record<string, string> = {
+  hearts_exhausted: 'Out of hearts',
+  farewell: 'Order complete',
+  // Finding S11: a session that ran to the cap did not finish, and until Phase 4 it said it did.
+  turn_cap: 'That is all the time uncle has',
+  manual: 'Session ended',
+}
+
+function Summary({
+  hearts,
+  turnIndex,
+  endReason,
+  sessionId,
+}: {
+  hearts: number
+  turnIndex: number
+  endReason: string | null
+  sessionId: string | null
+}) {
+  return (
+    <main style={{ ...screenStyle, textAlign: 'center' }}>
+      <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>
+        {(endReason && HEADLINES[endReason]) ?? 'Session ended'}
+      </h1>
+      <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: 'var(--text-secondary)' }}>
+        {turnIndex} {turnIndex === 1 ? 'turn' : 'turns'} &middot; {hearts} hearts left
+      </p>
+
+      {/* The report is a public link with no sign-in, which is the demo's whole shape: one
+          uninterrupted flow shows both halves of the product. Scoring was already scheduled by
+          the end route, so it is usually ready by the time this is clicked. */}
+      {sessionId ? (
+        <a href={`/report/${sessionId}`} style={{ ...primaryButtonStyle, textDecoration: 'none' }}>
+          See the session report
+        </a>
+      ) : null}
+
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          ...primaryButtonStyle,
+          background: 'var(--surface-sub)',
+          color: 'var(--text-primary)',
+        }}
+      >
+        Start again
+      </button>
+    </main>
+  )
+}

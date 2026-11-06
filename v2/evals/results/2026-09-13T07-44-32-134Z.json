@@ -1,0 +1,511 @@
+{
+  "report": {
+    "startedAt": "2026-09-13T07:44:32.132Z",
+    "model": "gateway",
+    "passed": true,
+    "checks": [
+      {
+        "name": "every fixture scored",
+        "passed": true,
+        "detail": "10/10 fixtures returned valid scores"
+      },
+      {
+        "name": "all scores within 0-100",
+        "passed": true,
+        "detail": "all in range"
+      },
+      {
+        "name": "strong scores above mixed",
+        "passed": true,
+        "detail": "strong 70.5 vs mixed 57.7 (need +8)"
+      },
+      {
+        "name": "mixed scores above weak",
+        "passed": true,
+        "detail": "mixed 57.7 vs weak 13.4 (need +8)"
+      },
+      {
+        "name": "mixed-01: social above strategic",
+        "passed": true,
+        "detail": "social 72.0 vs strategic 15.0"
+      },
+      {
+        "name": "mixed-02: operational above confidence",
+        "passed": true,
+        "detail": "operational 75.0 vs confidence 55.0"
+      },
+      {
+        "name": "strong-03: social above linguistic",
+        "passed": true,
+        "detail": "social 88.7 vs linguistic 75.0"
+      },
+      {
+        "name": "strong-03: confidence above linguistic",
+        "passed": true,
+        "detail": "confidence 82.3 vs linguistic 75.0"
+      },
+      {
+        "name": "strong-04: linguistic above social",
+        "passed": true,
+        "detail": "linguistic 72.0 vs social 41.7"
+      },
+      {
+        "name": "strong-04: operational above social",
+        "passed": true,
+        "detail": "operational 78.0 vs social 41.7"
+      },
+      {
+        "name": "weak-02: operational above strategic",
+        "passed": true,
+        "detail": "operational 15.0 vs strategic 6.7"
+      },
+      {
+        "name": "mixed-01: stable across runs",
+        "passed": true,
+        "detail": "sd 0.0 (max 12)"
+      },
+      {
+        "name": "mixed-02: stable across runs",
+        "passed": true,
+        "detail": "sd 0.3 (max 12)"
+      },
+      {
+        "name": "mixed-03: stable across runs",
+        "passed": true,
+        "detail": "sd 3.6 (max 12)"
+      },
+      {
+        "name": "strong-01: stable across runs",
+        "passed": true,
+        "detail": "sd 0.6 (max 12)"
+      },
+      {
+        "name": "strong-02: stable across runs",
+        "passed": true,
+        "detail": "sd 0.9 (max 12)"
+      },
+      {
+        "name": "strong-03: stable across runs",
+        "passed": true,
+        "detail": "sd 0.0 (max 12)"
+      },
+      {
+        "name": "strong-04: stable across runs",
+        "passed": true,
+        "detail": "sd 0.9 (max 12)"
+      },
+      {
+        "name": "weak-01: stable across runs",
+        "passed": true,
+        "detail": "sd 1.2 (max 12)"
+      },
+      {
+        "name": "weak-02: stable across runs",
+        "passed": true,
+        "detail": "sd 1.8 (max 12)"
+      },
+      {
+        "name": "weak-03: stable across runs",
+        "passed": true,
+        "detail": "sd 0.0 (max 12)"
+      },
+      {
+        "name": "scorer uses the range",
+        "passed": true,
+        "detail": "observed spread 85 across all dimensions (need 20)"
+      }
+    ]
+  },
+  "results": [
+    {
+      "fixtureId": "mixed-01",
+      "tier": "mixed",
+      "runs": [
+        {
+          "scores": {
+            "operational": 45,
+            "linguistic": 50,
+            "social": 72,
+            "strategic": 15,
+            "confidence": 35
+          },
+          "overall": 43.4,
+          "summary": "The learner demonstrated adequate social politeness and basic operational ability to construct simple two-icon messages, but failed to use repair strategies when the NPC repeatedly misunderstood. Repeating the identical utterance three times without modification or clarification shows strategic communication is a significant area for development."
+        },
+        {
+          "scores": {
+            "operational": 45,
+            "linguistic": 50,
+            "social": 72,
+            "strategic": 15,
+            "confidence": 35
+          },
+          "overall": 43.4,
+          "summary": "The learner successfully initiated the transaction and closed politely with appropriate icons, but failed to repair or rephrase when the vendor requested clarification three times. Repetition of the same 'I want + mee' combination without strategic variation or selection of a specific mee type suggests weak problem-solving when the board's vocabulary limitations became apparent."
+        },
+        {
+          "scores": {
+            "operational": 45,
+            "linguistic": 50,
+            "social": 72,
+            "strategic": 15,
+            "confidence": 35
+          },
+          "overall": 43.4,
+          "summary": "The learner demonstrated appropriate social greetings and politeness, but struggled with operational competence by repeatedly selecting the same generic 'mee' icons without attempting clarification or repair. When the NPC asked for specifics (fish ball vs. chicken), the learner did not modify their message or use strategic rephrasing, instead repeating the identical phrase three times, indicating minimal ability to adapt communication when misunderstood."
+        }
+      ]
+    },
+    {
+      "fixtureId": "mixed-02",
+      "tier": "mixed",
+      "runs": [
+        {
+          "scores": {
+            "operational": 75,
+            "linguistic": 60,
+            "social": 82,
+            "strategic": 20,
+            "confidence": 55
+          },
+          "overall": 58.4,
+          "summary": "The learner demonstrated competent social communication and reliable operational icon selection for a routine hawker ordering task, successfully completing the transaction with appropriate politeness markers. However, two timeouts requiring prompts and complete absence of any self-directed repair or clarification strategies indicate emerging fluency, with confidence undermined by dependence on external prompting during pauses."
+        },
+        {
+          "scores": {
+            "operational": 75,
+            "linguistic": 65,
+            "social": 80,
+            "strategic": 20,
+            "confidence": 55
+          },
+          "overall": 59,
+          "summary": "The learner demonstrates competent social communication and reliable icon selection for basic ordering tasks, but lacks initiative and strategic repair when faced with processing delays. Two prompted interventions suggest difficulty maintaining conversational flow without external support."
+        },
+        {
+          "scores": {
+            "operational": 75,
+            "linguistic": 65,
+            "social": 80,
+            "strategic": 20,
+            "confidence": 55
+          },
+          "overall": 59,
+          "summary": "The learner successfully navigated a routine food ordering interaction with appropriate icon selections and socially correct responses, but required prompting for two key turns and showed no attempt to recover independently when timeouts occurred. Vocabulary was functional but basic, and no repair or strategic communication was observed."
+        }
+      ]
+    },
+    {
+      "fixtureId": "mixed-03",
+      "tier": "mixed",
+      "runs": [
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 75,
+            "social": 88,
+            "strategic": 40,
+            "confidence": 82
+          },
+          "overall": 74,
+          "summary": "The learner demonstrated strong operational and social competence, successfully navigating a straightforward food ordering transaction with appropriate greeting, affirmative response, and thanks. However, when the NPC clarified \"Chicken rice ah?\", the learner simply confirmed rather than using repair or elaboration strategies, suggesting limited ability to handle miscommunication or negotiate specifications."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 70,
+            "social": 80,
+            "strategic": 20,
+            "confidence": 75
+          },
+          "overall": 66,
+          "summary": "The learner demonstrated reliable operational and social competence, successfully ordering food with appropriate politeness and turn-taking. However, strategic repair was absent—when the NPC clarified 'Chicken rice ah?', the learner simply confirmed rather than demonstrating any repair or negotiation skills, suggesting limited flexibility when communication requires more complex problem-solving."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 75,
+            "social": 90,
+            "strategic": 35,
+            "confidence": 80
+          },
+          "overall": 73,
+          "summary": "The learner demonstrated strong operational and social skills, navigating the hawker stall interaction smoothly with appropriate greetings, affirmations, and gratitude. However, strategic communication was limited—when the NPC clarified 'Chicken rice ah?', the learner simply affirmed rather than confirming the specific type, suggesting minimal repair or negotiation when ambiguity arose."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-01",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 75,
+            "social": 88,
+            "strategic": 78,
+            "confidence": 82
+          },
+          "overall": 81.6,
+          "summary": "The learner demonstrated competent AAC use across the entire ordering task, with clear icon selection and appropriate message construction. One effective repair occurred when the NPC misunderstood (two drumsticks), which the learner corrected clearly, showing reliable strategic competence."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 75,
+            "social": 88,
+            "strategic": 72,
+            "confidence": 82
+          },
+          "overall": 80.4,
+          "summary": "The learner demonstrated strong operational and social competence, navigating the hawker stall interaction with appropriate politeness markers and clear icon selections. When the NPC misunderstood the order (interpreting \"drumstick\" as \"two drumsticks\"), the learner successfully repaired using negation and quantification, showing developing strategic skills."
+        },
+        {
+          "scores": {
+            "operational": 82,
+            "linguistic": 75,
+            "social": 88,
+            "strategic": 72,
+            "confidence": 85
+          },
+          "overall": 80.4,
+          "summary": "The learner demonstrated strong operational and social competence, using icons effectively to construct coherent messages in a natural hawker ordering scenario. When the NPC misunderstood (two drumsticks), the learner successfully repaired by clarifying with a direct negation and restatement, showing reliable strategic awareness."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-02",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 72,
+            "social": 85,
+            "strategic": 55,
+            "confidence": 80
+          },
+          "overall": 74,
+          "summary": "The learner demonstrated competent operational and social communication skills, successfully ordering at a hawker stall with appropriate turn-taking and clear icon selection. However, strategic repair was minimal—when faced with the fish ball unavailability, the learner simply accepted the situation rather than exploring alternatives or clarifying options proactively."
+        },
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 72,
+            "social": 85,
+            "strategic": 45,
+            "confidence": 80
+          },
+          "overall": 72,
+          "summary": "The learner demonstrates competent operational and social communication skills, successfully navigating a food ordering scenario with appropriate icon selection and socially adept turn-taking. However, strategic competence is limited—when the NPC reported fish ball noodles were sold out, the learner simply accepted and pivoted rather than attempting any repair or negotiation, suggesting underdeveloped problem-solving strategies in communication breakdowns."
+        },
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 72,
+            "social": 85,
+            "strategic": 45,
+            "confidence": 80
+          },
+          "overall": 72,
+          "summary": "The learner demonstrated competent operational and social skills, successfully navigating the ordering scenario with appropriate icon combinations and respectful turn-taking. However, strategic competence was limited—when the preferred fish ball noodles were unavailable, the learner simply accepted the situation rather than attempting to negotiate or explore alternatives, showing minimal repair or problem-solving initiative."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-03",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 82,
+            "linguistic": 75,
+            "social": 88,
+            "strategic": 20,
+            "confidence": 85
+          },
+          "overall": 70,
+          "summary": "The learner demonstrated fluent operational and social competence, successfully navigating a complete food ordering transaction with appropriate icon selection and turn-taking. However, strategic repair skills were not observed, as the interaction proceeded without misunderstandings or breakdowns that would require rephrasing or compensation."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 75,
+            "social": 88,
+            "strategic": 20,
+            "confidence": 82
+          },
+          "overall": 70,
+          "summary": "The learner demonstrated fluent operational control and strong social appropriateness throughout the ordering interaction, with clear icon selections that conveyed intent effectively. However, no repair or strategic communication was required or attempted, as the interaction proceeded smoothly without misunderstandings or breakdowns."
+        },
+        {
+          "scores": {
+            "operational": 85,
+            "linguistic": 75,
+            "social": 90,
+            "strategic": 20,
+            "confidence": 80
+          },
+          "overall": 70,
+          "summary": "The learner demonstrated fluent operational and social competence, selecting appropriate icons and responding naturally to each turn in a hawker ordering scenario. Vocabulary and message structure were appropriate for the task, though no repair or strategic communication was required or attempted, as all exchanges proceeded smoothly without misunderstanding."
+        }
+      ]
+    },
+    {
+      "fixtureId": "strong-04",
+      "tier": "strong",
+      "runs": [
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 72,
+            "social": 45,
+            "strategic": 25,
+            "confidence": 75
+          },
+          "overall": 59,
+          "summary": "The learner demonstrates solid operational and linguistic competence with accurate icon selection and appropriate message construction throughout the ordering task. However, social appropriateness suffers due to impatient and demanding tone, and there is minimal evidence of repair strategies when the NPC expresses frustration."
+        },
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 72,
+            "social": 45,
+            "strategic": 25,
+            "confidence": 75
+          },
+          "overall": 59,
+          "summary": "The learner demonstrates solid operational and linguistic control, constructing grammatically coherent and purposeful icon sequences throughout. However, social appropriateness deteriorates significantly—the repeated demands and impatient tone escalate the NPC's frustration rather than de-escalate it—and there is no evidence of strategic repair when the NPC becomes visibly upset."
+        },
+        {
+          "scores": {
+            "operational": 78,
+            "linguistic": 72,
+            "social": 35,
+            "strategic": 25,
+            "confidence": 75
+          },
+          "overall": 57,
+          "summary": "The learner demonstrated strong operational fluency and clear icon selection to construct complete, grammatically coherent messages throughout the ordering task. However, social competence was significantly undermined by increasingly demanding and impatient behavior that escalated tension with the NPC, and there was no evidence of strategic repair when the NPC expressed frustration—the learner continued with the same direct, pressuring approach rather than adjusting tone or repairing the interaction."
+        }
+      ]
+    },
+    {
+      "fixtureId": "weak-01",
+      "tier": "weak",
+      "runs": [
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 20,
+            "strategic": 5,
+            "confidence": 15
+          },
+          "overall": 13,
+          "summary": "The learner struggled fundamentally with the ordering task, selecting largely off-topic icons (cat, blue) that did not match the food-ordering context. When \"food\" was eventually selected, it was repeated without refinement or repair despite the NPC's clear request for specification. No meaningful communication exchange occurred."
+        },
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 25,
+            "strategic": 5,
+            "confidence": 20
+          },
+          "overall": 15,
+          "summary": "The learner selected icons that were semantically off-context for the ordering task (cat, blue, food) and failed to construct a coherent message specifying what food was desired. No repair attempts were made after repeated NPC confusion, and the session ended with the NPC imposing a choice rather than the learner successfully communicating."
+        },
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 20,
+            "strategic": 5,
+            "confidence": 10
+          },
+          "overall": 12,
+          "summary": "The learner made off-context icon selections (cat, blue) that did not align with the food ordering task, and when the NPC asked for clarification, the learner repeated 'food' without refining the message or recovering from the breakdown. There is minimal evidence of intentional AAC board use or strategic repair."
+        }
+      ]
+    },
+    {
+      "fixtureId": "weak-02",
+      "tier": "weak",
+      "runs": [
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 25,
+            "strategic": 5,
+            "confidence": 8
+          },
+          "overall": 12.6,
+          "summary": "The learner demonstrated severe difficulty with operational AAC use, repeatedly selecting only a generic 'thing' icon without specification despite the NPC's clear requests for clarification. No strategic repair attempts were made; instead, the same non-functional message was repeated four times before a minimal one-word response, resulting in the NPC making an assumption rather than the learner successfully communicating their order."
+        },
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 20,
+            "social": 25,
+            "strategic": 10,
+            "confidence": 12
+          },
+          "overall": 16.4,
+          "summary": "The learner relied on a single, vague icon combination (I want + thing) throughout the exchange, demonstrating minimal operational and linguistic flexibility. Despite repeated NPC confusion signals, no repair strategies were attempted—the learner repeated the same ineffective message verbatim, failing to point, specify, or rephrase, and only dropped to a single icon after multiple failed attempts. The session ended in communicative breakdown with the NPC making an assumption rather than achieving mutual understanding."
+        },
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 25,
+            "strategic": 5,
+            "confidence": 8
+          },
+          "overall": 12.6,
+          "summary": "The learner repeatedly selected the same non-specific icon combination ('I want + thing') without adapting to the NPC's explicit requests for clarification, and made no meaningful repair attempts across four rejections. Only at the end, when the interaction had already failed, did the learner select a different icon ('thing' alone), too late to succeed."
+        }
+      ]
+    },
+    {
+      "fixtureId": "weak-03",
+      "tier": "weak",
+      "runs": [
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 25,
+            "strategic": 5,
+            "confidence": 10
+          },
+          "overall": 13,
+          "summary": "The learner demonstrated severe difficulty with operational AAC use, repeatedly selecting only the 'yes' icon without elaborating or responding to the NPC's specific requests for clarification. No repair strategies were attempted despite multiple communication breakdowns, and the learner appeared unable to progress beyond one-word responses even when prompted."
+        },
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 25,
+            "strategic": 5,
+            "confidence": 10
+          },
+          "overall": 13,
+          "summary": "The learner demonstrated severe difficulty with AAC board operation and communication breakdown. Repeated selection of only 'yes' without elaboration or repair attempts when the NPC expressed confusion indicates absent-to-emerging skills across all dimensions, with particular weakness in strategic repair and linguistic expression needed for functional ordering."
+        },
+        {
+          "scores": {
+            "operational": 15,
+            "linguistic": 10,
+            "social": 25,
+            "strategic": 5,
+            "confidence": 10
+          },
+          "overall": 13,
+          "summary": "The learner selected only the 'yes' icon repeatedly without building meaningful utterances or responding to the NPC's specific questions about food choice. Multiple timeouts and lack of message elaboration indicate minimal operational competence and no evidence of repair strategies when misunderstandings arose."
+        }
+      ]
+    }
+  ]
+}

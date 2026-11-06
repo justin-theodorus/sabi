@@ -1,0 +1,141 @@
+{
+  "id": "mixed-02",
+  "tier": "mixed",
+  "mode": "survival",
+  "intent": "Knows the board and picks sensible icons, but hesitates: two turns only happen after the uncle prompts, and a heart is lost to a timeout. Operational should sit above confidence. Separation case.",
+  "expect": {
+    "dimensionsAbove": [
+      [
+        "operational",
+        "confidence"
+      ]
+    ]
+  },
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "hello"
+        ],
+        "translated": "Hello",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hello, what you want?",
+        "npcEmotion": "neutral",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "timeout"
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "chicken rice"
+        ],
+        "translated": "I want chicken rice",
+        "turnIndex": 1,
+        "npcInitiated": true
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Okay. Small or big?",
+        "npcEmotion": "neutral",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "timeout"
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "small",
+          "please"
+        ],
+        "translated": "Small please",
+        "turnIndex": 2,
+        "npcInitiated": true
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Small chicken rice. Drink?",
+        "npcEmotion": "neutral",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "no"
+        ],
+        "translated": "No",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Okay. Three fifty.",
+        "npcEmotion": "neutral",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "thank you"
+        ],
+        "translated": "Thank you",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Here you go.",
+        "npcEmotion": "neutral",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

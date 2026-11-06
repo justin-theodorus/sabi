@@ -1,0 +1,29 @@
+// Timing constants, from v1 session/page.tsx:21-24. None of them had a comment explaining the
+// number (finding 2.12); the notes below are what the numbers are actually for, so the next
+// person is not guessing.
+
+/** Silence after which the NPC speaks unprompted. Shorter in survival: the NPC is impatient. */
+export const BUMP_MS = {
+  survival: 15_000,
+  learning: 20_000,
+} as const
+
+/** Survival only. Silence past this costs a heart. Twice the survival bump, so the NPC always
+ *  nudges once before the learner is penalised. */
+export const SURVIVAL_TIMEOUT_MS = 30_000
+
+export const MAX_HEARTS = 5
+
+/** One clock for the whole page, replacing v1's three independent timers. */
+export const TICK_MS = 1_000
+
+/** Webcam sample rate, matching v1's useEmotionCapture.ts:121. README.md:233 claimed 500ms and was
+ *  wrong about v1 too.
+ *
+ *  MEASURED in Phase 5, against the deployed build, and the number this comment used to carry was
+ *  wrong by 3.5x. It said "~8ms of inference per frame ... under 1% of a core", inherited from the
+ *  Phase 3 spike. The landmarker actually costs ~29ms per frame at p50 on an M-series Mac (81
+ *  frames, headless and headed agreeing to within 2ms), so at 1 Hz this is nearer 3% of a core.
+ *  Still affordable, which is what the sample rate rests on — but see MEASUREMENTS.md section 4
+ *  rather than trusting the round number that used to be here. */
+export const EXPRESSION_SAMPLE_MS = 1_000

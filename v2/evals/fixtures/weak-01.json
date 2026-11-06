@@ -1,0 +1,112 @@
+{
+  "id": "weak-01",
+  "tier": "weak",
+  "mode": "survival",
+  "intent": "Single-icon messages, frequently off-topic, no greeting, no repair, two hearts lost. Everything should score low.",
+  "expect": {},
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "cat"
+        ],
+        "translated": "Cat",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hah? Cat? This is a food stall.",
+        "npcEmotion": "confused",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "off_context"
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "blue"
+        ],
+        "translated": "Blue",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Blue? You want blue what?",
+        "npcEmotion": "confused",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "heart_lost",
+      "payload": {
+        "reason": "off_context"
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "food"
+        ],
+        "translated": "Food",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "What food? I have many.",
+        "npcEmotion": "confused",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "food"
+        ],
+        "translated": "Food",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Aiyo. I give you chicken rice lah.",
+        "npcEmotion": "mad",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "hearts_exhausted"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

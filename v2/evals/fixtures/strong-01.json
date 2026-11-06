@@ -1,0 +1,148 @@
+{
+  "id": "strong-01",
+  "tier": "strong",
+  "mode": "learning",
+  "intent": "Fluent ordering. Rich icon combinations, polite framing, and one genuine repair after the uncle mishears. Everything should score high, strategic included.",
+  "expect": {},
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "hello",
+          "uncle"
+        ],
+        "translated": "Hello uncle",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Ah, hello! What you want today?",
+        "npcEmotion": "happy",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "chicken rice",
+          "please"
+        ],
+        "translated": "I want chicken rice please",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Chicken rice! You want the drumstick or breast?",
+        "npcEmotion": "happy",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "drumstick",
+          "please"
+        ],
+        "translated": "Drumstick please",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Wah, you want two drumsticks ah?",
+        "npcEmotion": "confused",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "no",
+          "one",
+          "drumstick"
+        ],
+        "translated": "No, one drumstick",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Ah okay, one drumstick. Anything to drink?",
+        "npcEmotion": "happy",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "kopi"
+        ],
+        "translated": "I want kopi",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Kopi coming up. Five dollars.",
+        "npcEmotion": "neutral",
+        "turnIndex": 4,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "thank you",
+          "uncle"
+        ],
+        "translated": "Thank you uncle",
+        "turnIndex": 5,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Here you go, come again!",
+        "npcEmotion": "happy",
+        "turnIndex": 5,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}

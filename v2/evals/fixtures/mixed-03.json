@@ -1,0 +1,102 @@
+{
+  "id": "mixed-03",
+  "tier": "mixed",
+  "mode": "learning",
+  "intent": "Genuinely ambiguous by construction. A short, unremarkable exchange that achieves the goal with no notable strength and no notable failure. This one exists to sit between the tiers.",
+  "expect": {},
+  "events": [
+    {
+      "type": "session_start",
+      "payload": {}
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "hello"
+        ],
+        "translated": "Hello",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Hello! What you want?",
+        "npcEmotion": "happy",
+        "turnIndex": 0,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "I want",
+          "rice"
+        ],
+        "translated": "I want rice",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Chicken rice ah?",
+        "npcEmotion": "confused",
+        "turnIndex": 1,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "yes"
+        ],
+        "translated": "Yes",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Okay, four dollars.",
+        "npcEmotion": "neutral",
+        "turnIndex": 2,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "icon_selection",
+      "payload": {
+        "icons": [
+          "okay",
+          "thank you"
+        ],
+        "translated": "Okay thank you",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "npc_response",
+      "payload": {
+        "content": "Here you go, enjoy.",
+        "npcEmotion": "happy",
+        "turnIndex": 3,
+        "npcInitiated": false
+      }
+    },
+    {
+      "type": "session_end",
+      "payload": {
+        "reason": "farewell"
+      }
+    }
+  ],
+  "scenarioId": "hawker_centre"
+}
